@@ -8,7 +8,7 @@
         /// <summary>
         /// Тестовая ссылка
         /// </summary>
-        public string TestUrl
+        public string UrlWithEndpoint
         {
             get
             {

@@ -36,21 +36,37 @@ public class SqlInjectionScanner
     {
         SqlInjectionTestData.GetTestDataByPortalType(_portalType, out List<string> getRequestsEndpoints, out List<PostRequestParams> postRequestsInfo);
         var results = new List<HttpResponseEntity>();
+        // Boolean-based payload'ы обрабатываются отдельно, потому что требуют парного сравнения ответов.
+        var payloadsWithoutBooleanBased = SqlInjectionTestData.BasePayloadsInfo.FindAll(payloadInfo => payloadInfo.SqlInjectionType != SqlInjectionType.BooleanBased);
 
         foreach (var endpointInfo in getRequestsEndpoints)
         {
-            foreach (var payloadInfo in SqlInjectionTestData.BasePayloadsInfo)
+            foreach (var payloadInfo in payloadsWithoutBooleanBased)
             {
                 var result = TestGetRequest(endpointInfo, payloadInfo);
+                results.Add(result.Result);
+            }
+
+            foreach (var booleanPayloadPair in SqlInjectionTestData.BooleanBasedPayloadPairs)
+            {
+                // Для слепой boolean-based проверки отправляем обе ветки: true и false.
+                var result = TestBooleanBasedGetRequest(endpointInfo, booleanPayloadPair);
                 results.Add(result.Result);
             }
         }
 
         foreach (var endpointInfo in postRequestsInfo) 
         {
-            foreach (var payloadInfo in SqlInjectionTestData.BasePayloadsInfo)
+            foreach (var payloadInfo in payloadsWithoutBooleanBased)
             {
                 var result = TestPostRequest(endpointInfo, payloadInfo);
+                results.Add(result.Result);
+            }
+
+            foreach (var booleanPayloadPair in SqlInjectionTestData.BooleanBasedPayloadPairs)
+            {
+                // Для слепой boolean-based проверки отправляем обе ветки: true и false.
+                var result = TestBooleanBasedPostRequest(endpointInfo, booleanPayloadPair);
                 results.Add(result.Result);
             }
         }
@@ -68,18 +84,8 @@ public class SqlInjectionScanner
     {
         try
         {
-            string encodedPayload = Uri.EscapeDataString(payloadInfo.Payload);
-            var testUrl = _baseUrl + endpoint + encodedPayload;
-
-            // Выполняем GET-запрос
-            var stopwatch = Stopwatch.StartNew();
-            var response = await _httpClient.GetAsync(testUrl);
-            stopwatch.Stop();
-
-            // Читаем содержимое ответа
-            var content = await response.Content.ReadAsStringAsync();
-            var statusCode = response.StatusCode;
-            bool isSqlInjection = IsSqlInjectionExists(content, statusCode, stopwatch.ElapsedMilliseconds, out string sqlInjectionSign);
+            var responseInfo = await ExecuteGetRequest(endpoint, payloadInfo.Payload);
+            bool isSqlInjection = IsSqlInjectionExists(responseInfo.Content, responseInfo.StatusCode, responseInfo.ElapsedMilliseconds, out string sqlInjectionSign);
 
             return new HttpResponseEntity
             {
@@ -89,10 +95,10 @@ public class SqlInjectionScanner
                 RequestType = "GET",
                 SqlInjectionType = payloadInfo.SqlInjectionType,
                 FixRecommendation = GetRecommendationForSqlInjection(payloadInfo.SqlInjectionType),
-                StatusCode = statusCode,
+                StatusCode = responseInfo.StatusCode,
                 IsSqlVulnerable = isSqlInjection,
                 SqlInjectionSign = sqlInjectionSign,
-                ResponseLength = content.Length
+                ResponseLength = responseInfo.Content.Length
             };
         }
         catch (Exception)
@@ -111,35 +117,8 @@ public class SqlInjectionScanner
     {
         try 
         {
-            string testUrl = _baseUrl + postRequestInfo.Endpoint;
-
-            // Для JSON сериализуем полезную нагрузку как JSON
-            var jsonPayload = new Dictionary<string, object>();
-
-            foreach (var dataItem in postRequestInfo.BodyParams)
-            {
-                jsonPayload[dataItem.Key] = dataItem.Value;
-            }
-
-            // Добавляем полезную нагрузку SQL-инъекции
-            foreach (var injectionField in postRequestInfo.BodyParams)
-            {
-                if (jsonPayload.ContainsKey(injectionField.Key))
-                {
-                    jsonPayload[injectionField.Key] = payloadInfo.Payload;
-                }
-            }
-            string jsonContent = JsonSerializer.Serialize(jsonPayload);
-            var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-            // Выполняем POST-запрос
-            var stopwatch = Stopwatch.StartNew();
-            var response = await _httpClient.PostAsync(testUrl, httpContent);
-            stopwatch.Stop();
-
-            var content = await response.Content.ReadAsStringAsync();
-            var statusCode = response.StatusCode;
-            bool isSqlInjection = IsSqlInjectionExists(content, statusCode, stopwatch.ElapsedMilliseconds, out string sqlInjectionSign);
+            var responseInfo = await ExecutePostRequest(postRequestInfo, payloadInfo.Payload);
+            bool isSqlInjection = IsSqlInjectionExists(responseInfo.Content, responseInfo.StatusCode, responseInfo.ElapsedMilliseconds, out string sqlInjectionSign);
 
             return new HttpResponseEntity
             {
@@ -147,19 +126,146 @@ public class SqlInjectionScanner
                 Endpoint = postRequestInfo.Endpoint,
                 Payload = payloadInfo.Payload,
                 RequestType = "POST",
-                JsonBodyParams = jsonContent,
+                JsonBodyParams = responseInfo.JsonBodyParams,
                 SqlInjectionType = payloadInfo.SqlInjectionType,
                 FixRecommendation = GetRecommendationForSqlInjection(payloadInfo.SqlInjectionType),
-                StatusCode = statusCode,
+                StatusCode = responseInfo.StatusCode,
                 IsSqlVulnerable = isSqlInjection,
                 SqlInjectionSign = sqlInjectionSign,
-                ResponseLength = content.Length
+                ResponseLength = responseInfo.Content.Length
             };
         } 
         catch (Exception)
         {
             throw;
         }
+    }
+
+    /// <summary>
+    /// Проверка GET-запроса на поиск boolean-based SQL-инъекции по паре нагрузок.
+    /// </summary>
+    /// <param name="endpoint">Эндпоинт</param>
+    /// <param name="payloadPair">Пара boolean-based нагрузок</param>
+    /// <returns></returns>
+    private async Task<HttpResponseEntity> TestBooleanBasedGetRequest(string endpoint, BooleanBasedPayloadPairEntity payloadPair)
+    {
+        try
+        {
+            // Уязвимость подтверждается только если приложение по-разному отвечает на истинное и ложное условие.
+            var trueResponseInfo = await ExecuteGetRequest(endpoint, payloadPair.TruePayloadInfo.Payload);
+            var falseResponseInfo = await ExecuteGetRequest(endpoint, payloadPair.FalsePayloadInfo.Payload);
+            bool isSqlInjection = IsBooleanBasedSqlInjectionExists(trueResponseInfo.Content, trueResponseInfo.StatusCode,
+                falseResponseInfo.Content, falseResponseInfo.StatusCode, out string sqlInjectionSign);
+
+            return new HttpResponseEntity
+            {
+                BaseUrl = _baseUrl,
+                Endpoint = endpoint,
+                Payload = $"TRUE: {payloadPair.TruePayloadInfo.Payload}; FALSE: {payloadPair.FalsePayloadInfo.Payload}",
+                RequestType = "GET",
+                SqlInjectionType = SqlInjectionType.BooleanBased,
+                FixRecommendation = GetRecommendationForSqlInjection(SqlInjectionType.BooleanBased),
+                StatusCode = trueResponseInfo.StatusCode,
+                IsSqlVulnerable = isSqlInjection,
+                SqlInjectionSign = sqlInjectionSign,
+                ResponseLength = trueResponseInfo.Content.Length
+            };
+        }
+        catch (Exception)
+        {
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Проверка POST-запроса на поиск boolean-based SQL-инъекции по паре нагрузок.
+    /// </summary>
+    /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
+    /// <param name="payloadPair">Пара boolean-based нагрузок</param>
+    /// <returns></returns>
+    private async Task<HttpResponseEntity> TestBooleanBasedPostRequest(PostRequestParams postRequestInfo, BooleanBasedPayloadPairEntity payloadPair)
+    {
+        try
+        {
+            // Уязвимость подтверждается только если приложение по-разному отвечает на истинное и ложное условие.
+            var trueResponseInfo = await ExecutePostRequest(postRequestInfo, payloadPair.TruePayloadInfo.Payload);
+            var falseResponseInfo = await ExecutePostRequest(postRequestInfo, payloadPair.FalsePayloadInfo.Payload);
+            bool isSqlInjection = IsBooleanBasedSqlInjectionExists(trueResponseInfo.Content, trueResponseInfo.StatusCode,
+                falseResponseInfo.Content, falseResponseInfo.StatusCode, out string sqlInjectionSign);
+
+            return new HttpResponseEntity
+            {
+                BaseUrl = _baseUrl,
+                Endpoint = postRequestInfo.Endpoint,
+                Payload = $"TRUE: {payloadPair.TruePayloadInfo.Payload}; FALSE: {payloadPair.FalsePayloadInfo.Payload}",
+                RequestType = "POST",
+                JsonBodyParams = $"TRUE payload body: {trueResponseInfo.JsonBodyParams}{Environment.NewLine}FALSE payload body: {falseResponseInfo.JsonBodyParams}",
+                SqlInjectionType = SqlInjectionType.BooleanBased,
+                FixRecommendation = GetRecommendationForSqlInjection(SqlInjectionType.BooleanBased),
+                StatusCode = trueResponseInfo.StatusCode,
+                IsSqlVulnerable = isSqlInjection,
+                SqlInjectionSign = sqlInjectionSign,
+                ResponseLength = trueResponseInfo.Content.Length
+            };
+        } 
+        catch (Exception)
+        {
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Выполнение GET-запроса с тестовой нагрузкой.
+    /// </summary>
+    /// <param name="endpoint">Эндпоинт</param>
+    /// <param name="payload">Полезная нагрузка</param>
+    /// <returns></returns>
+    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds)> ExecuteGetRequest(string endpoint, string payload)
+    {
+        string encodedPayload = Uri.EscapeDataString(payload);
+        var testUrl = _baseUrl + endpoint + encodedPayload;
+
+        var stopwatch = Stopwatch.StartNew();
+        var response = await _httpClient.GetAsync(testUrl);
+        stopwatch.Stop();
+
+        var content = await response.Content.ReadAsStringAsync();
+        return (content, response.StatusCode, stopwatch.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    /// Выполнение POST-запроса с тестовой нагрузкой.
+    /// </summary>
+    /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
+    /// <param name="payload">Полезная нагрузка</param>
+    /// <returns></returns>
+    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds, string JsonBodyParams)> ExecutePostRequest(PostRequestParams postRequestInfo, string payload)
+    {
+        string testUrl = _baseUrl + postRequestInfo.Endpoint;
+
+        var jsonPayload = new Dictionary<string, object>();
+        foreach (var dataItem in postRequestInfo.BodyParams)
+        {
+            jsonPayload[dataItem.Key] = dataItem.Value;
+        }
+
+        foreach (var injectionField in postRequestInfo.BodyParams)
+        {
+            if (jsonPayload.ContainsKey(injectionField.Key))
+            {
+                jsonPayload[injectionField.Key] = payload;
+            }
+        }
+
+        string jsonContent = JsonSerializer.Serialize(jsonPayload);
+        var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+        var stopwatch = Stopwatch.StartNew();
+        var response = await _httpClient.PostAsync(testUrl, httpContent);
+        stopwatch.Stop();
+
+        var content = await response.Content.ReadAsStringAsync();
+        return (content, response.StatusCode, stopwatch.ElapsedMilliseconds, jsonContent);
     }
 
     /// <summary>
@@ -232,7 +338,50 @@ public class SqlInjectionScanner
             return true;
         }
 
-        sqlInjectionSign = default;
+        sqlInjectionSign = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Проверка, нашли ли boolean-based SQL-инъекцию по различию ответов на true/false payload'ы.
+    /// </summary>
+    /// <param name="trueContent">Контент ответа на true payload</param>
+    /// <param name="trueStatusCode">Код ответа на true payload</param>
+    /// <param name="falseContent">Контент ответа на false payload</param>
+    /// <param name="falseStatusCode">Код ответа на false payload</param>
+    /// <param name="sqlInjectionSign">Текстовый признак обнаружения sql-инъекции</param>
+    /// <returns></returns>
+    private bool IsBooleanBasedSqlInjectionExists(string trueContent, HttpStatusCode trueStatusCode,
+        string falseContent, HttpStatusCode falseStatusCode, out string sqlInjectionSign)
+    {
+        var signs = new List<string>();
+
+        // Разные статусы часто означают, что SQL-условие меняет серверную ветку выполнения.
+        if (trueStatusCode != falseStatusCode)
+        {
+            signs.Add($"коды ответа отличаются: TRUE={trueStatusCode}, FALSE={falseStatusCode}");
+        }
+
+        // Даже при одинаковом статусе различие тела ответа указывает на boolean-based поведение.
+        if (!string.Equals(trueContent, falseContent, StringComparison.Ordinal))
+        {
+            if (trueContent.Length != falseContent.Length)
+            {
+                signs.Add($"длина ответов отличается: TRUE={trueContent.Length}, FALSE={falseContent.Length}");
+            }
+            else
+            {
+                signs.Add("тело ответов отличается при одинаковой длине");
+            }
+        }
+
+        if (signs.Count > 0)
+        {
+            sqlInjectionSign = $"Boolean-based проверка подтвердилась: ответы на TRUE/FALSE payload различаются ({string.Join("; ", signs)})";
+            return true;
+        }
+
+        sqlInjectionSign = string.Empty;
         return false;
     }
 
@@ -244,7 +393,7 @@ public class SqlInjectionScanner
     /// <returns></returns>
     private bool HasSensitiveJsonData(string content, out string sqlInjectionSign)
     {
-        sqlInjectionSign = default;
+        sqlInjectionSign = string.Empty;
 
         if (string.IsNullOrWhiteSpace(content))
             return false;

@@ -10,7 +10,7 @@ namespace WebVulnerabilitiesScanner.Helpers
         /// <param name="httpResponseEntity">Сущность ответа http-запроса</param>
         public static void WriteHttpRequestResult(HttpResponseEntity httpResponseEntity) 
         {
-            Console.WriteLine($"Ссылка: {httpResponseEntity.TestUrl}");
+            Console.WriteLine($"Полный адрес портала (с эндпоинтом): {httpResponseEntity.UrlWithEndpoint}");
             Console.WriteLine($"Endpoint: {httpResponseEntity.Endpoint}");
             Console.WriteLine($"Payload: {httpResponseEntity.Payload}");
             Console.WriteLine($"Статус: {httpResponseEntity.StatusCode}");

