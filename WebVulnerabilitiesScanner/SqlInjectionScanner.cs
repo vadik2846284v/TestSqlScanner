@@ -36,14 +36,23 @@ public class SqlInjectionScanner
     {
         SqlInjectionTestData.GetTestDataByPortalType(_portalType, out List<string> getRequestsEndpoints, out List<PostRequestParams> postRequestsInfo);
         var results = new List<HttpResponseEntity>();
-        // Boolean-based payload'ы обрабатываются отдельно, потому что требуют парного сравнения ответов.
-        var payloadsWithoutBooleanBased = SqlInjectionTestData.BasePayloadsInfo.FindAll(payloadInfo => payloadInfo.SqlInjectionType != SqlInjectionType.BooleanBased);
+        // Boolean-based и time-based payload'ы обрабатываются отдельно, потому что требуют специальной логики проверки.
+        var singleCheckPayloads = SqlInjectionTestData.BasePayloadsInfo.FindAll(payloadInfo =>
+            payloadInfo.SqlInjectionType != SqlInjectionType.BooleanBased &&
+            payloadInfo.SqlInjectionType != SqlInjectionType.TimeBasedBlind);
 
         foreach (var endpointInfo in getRequestsEndpoints)
         {
-            foreach (var payloadInfo in payloadsWithoutBooleanBased)
+            foreach (var payloadInfo in singleCheckPayloads)
             {
                 var result = TestGetRequest(endpointInfo, payloadInfo);
+                results.Add(result.Result);
+            }
+
+            foreach (var payloadInfo in SqlInjectionTestData.TimeBasedBlindPayloadsInfo)
+            {
+                // Для time-based проверки отправляем несколько одинаковых запросов и считаем среднее время ответа.
+                var result = TestTimeBasedGetRequest(endpointInfo, payloadInfo);
                 results.Add(result.Result);
             }
 
@@ -57,9 +66,16 @@ public class SqlInjectionScanner
 
         foreach (var endpointInfo in postRequestsInfo) 
         {
-            foreach (var payloadInfo in payloadsWithoutBooleanBased)
+            foreach (var payloadInfo in singleCheckPayloads)
             {
                 var result = TestPostRequest(endpointInfo, payloadInfo);
+                results.Add(result.Result);
+            }
+
+            foreach (var payloadInfo in SqlInjectionTestData.TimeBasedBlindPayloadsInfo)
+            {
+                // Для time-based проверки отправляем несколько одинаковых запросов и считаем среднее время ответа.
+                var result = TestTimeBasedPostRequest(endpointInfo, payloadInfo);
                 results.Add(result.Result);
             }
 
@@ -74,6 +90,7 @@ public class SqlInjectionScanner
         return results;
     }
 
+    #region GET Methods tests
     /// <summary>
     /// Проверка GET-запроса на поиск SQL-инъекции 
     /// </summary>
@@ -85,7 +102,8 @@ public class SqlInjectionScanner
         try
         {
             var responseInfo = await ExecuteGetRequest(endpoint, payloadInfo.Payload);
-            bool isSqlInjection = IsSqlInjectionExists(responseInfo.Content, responseInfo.StatusCode, responseInfo.ElapsedMilliseconds, out string sqlInjectionSign);
+            bool isSqlInjection = IsSqlInjectionExists(responseInfo.Content, responseInfo.StatusCode, responseInfo.ElapsedMilliseconds,
+                out string sqlInjectionSign);
 
             return new HttpResponseEntity
             {
@@ -101,40 +119,6 @@ public class SqlInjectionScanner
                 ResponseLength = responseInfo.Content.Length
             };
         }
-        catch (Exception)
-        {
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Проверка POST-запроса на поиск SQL-инъекции
-    /// </summary>
-    /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
-    /// <param name="payloadInfo">Полезная нагрузка</param>
-    /// <returns></returns>
-    private async Task<HttpResponseEntity> TestPostRequest(PostRequestParams postRequestInfo, RequestSqlInjectionPayloadEntity payloadInfo) 
-    {
-        try 
-        {
-            var responseInfo = await ExecutePostRequest(postRequestInfo, payloadInfo.Payload);
-            bool isSqlInjection = IsSqlInjectionExists(responseInfo.Content, responseInfo.StatusCode, responseInfo.ElapsedMilliseconds, out string sqlInjectionSign);
-
-            return new HttpResponseEntity
-            {
-                BaseUrl = _baseUrl,
-                Endpoint = postRequestInfo.Endpoint,
-                Payload = payloadInfo.Payload,
-                RequestType = "POST",
-                JsonBodyParams = responseInfo.JsonBodyParams,
-                SqlInjectionType = payloadInfo.SqlInjectionType,
-                FixRecommendation = GetRecommendationForSqlInjection(payloadInfo.SqlInjectionType),
-                StatusCode = responseInfo.StatusCode,
-                IsSqlVulnerable = isSqlInjection,
-                SqlInjectionSign = sqlInjectionSign,
-                ResponseLength = responseInfo.Content.Length
-            };
-        } 
         catch (Exception)
         {
             throw;
@@ -178,6 +162,109 @@ public class SqlInjectionScanner
     }
 
     /// <summary>
+    /// Проверка GET-запроса на поиск time-based SQL-инъекции по усреднённому времени ответа.
+    /// </summary>
+    /// <param name="endpoint">Эндпоинт</param>
+    /// <param name="payloadInfo">Информация о полезной нагрузке</param>
+    /// <returns></returns>
+    private async Task<HttpResponseEntity> TestTimeBasedGetRequest(string endpoint, RequestSqlInjectionPayloadEntity payloadInfo)
+    {
+        try
+        {
+            var responseInfo = await ExecuteGetRequestWithAverageTiming(endpoint, payloadInfo.Payload, SqlInjectionTestData.TimeBasedBlindRequestsCountForAverage);
+            bool isSqlInjection = IsTimeBasedSqlInjectionExists(responseInfo.ElapsedMilliseconds, responseInfo.MeasurementsCount, out string sqlInjectionSign);
+
+            return new HttpResponseEntity
+            {
+                BaseUrl = _baseUrl,
+                Endpoint = endpoint,
+                Payload = payloadInfo.Payload,
+                RequestType = "GET",
+                SqlInjectionType = payloadInfo.SqlInjectionType,
+                FixRecommendation = GetRecommendationForSqlInjection(payloadInfo.SqlInjectionType),
+                StatusCode = responseInfo.StatusCode,
+                IsSqlVulnerable = isSqlInjection,
+                SqlInjectionSign = sqlInjectionSign,
+                ResponseLength = responseInfo.Content.Length
+            };
+        }
+        catch (Exception)
+        {
+            throw;
+        }
+    }
+    #endregion
+
+    #region POST Methods tests
+    /// <summary>
+    /// Проверка POST-запроса на поиск SQL-инъекции
+    /// </summary>
+    /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
+    /// <param name="payloadInfo">Полезная нагрузка</param>
+    /// <returns></returns>
+    private async Task<HttpResponseEntity> TestPostRequest(PostRequestParams postRequestInfo, RequestSqlInjectionPayloadEntity payloadInfo) 
+    {
+        try 
+        {
+            var responseInfo = await ExecutePostRequest(postRequestInfo, payloadInfo.Payload);
+            bool isSqlInjection = IsSqlInjectionExists(responseInfo.Content, responseInfo.StatusCode, responseInfo.ElapsedMilliseconds, out string sqlInjectionSign);
+
+            return new HttpResponseEntity
+            {
+                BaseUrl = _baseUrl,
+                Endpoint = postRequestInfo.Endpoint,
+                Payload = payloadInfo.Payload,
+                RequestType = "POST",
+                JsonBodyParams = responseInfo.JsonBodyParams,
+                SqlInjectionType = payloadInfo.SqlInjectionType,
+                FixRecommendation = GetRecommendationForSqlInjection(payloadInfo.SqlInjectionType),
+                StatusCode = responseInfo.StatusCode,
+                IsSqlVulnerable = isSqlInjection,
+                SqlInjectionSign = sqlInjectionSign,
+                ResponseLength = responseInfo.Content.Length
+            };
+        } 
+        catch (Exception)
+        {
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Проверка POST-запроса на поиск time-based SQL-инъекции по усреднённому времени ответа.
+    /// </summary>
+    /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
+    /// <param name="payloadInfo">Информация о полезной нагрузке</param>
+    /// <returns></returns>
+    private async Task<HttpResponseEntity> TestTimeBasedPostRequest(PostRequestParams postRequestInfo, RequestSqlInjectionPayloadEntity payloadInfo)
+    {
+        try
+        {
+            var responseInfo = await ExecutePostRequestWithAverageTiming(postRequestInfo, payloadInfo.Payload, SqlInjectionTestData.TimeBasedBlindRequestsCountForAverage);
+            bool isSqlInjection = IsTimeBasedSqlInjectionExists(responseInfo.ElapsedMilliseconds, responseInfo.MeasurementsCount, out string sqlInjectionSign);
+
+            return new HttpResponseEntity
+            {
+                BaseUrl = _baseUrl,
+                Endpoint = postRequestInfo.Endpoint,
+                Payload = payloadInfo.Payload,
+                RequestType = "POST",
+                JsonBodyParams = responseInfo.JsonBodyParams,
+                SqlInjectionType = payloadInfo.SqlInjectionType,
+                FixRecommendation = GetRecommendationForSqlInjection(payloadInfo.SqlInjectionType),
+                StatusCode = responseInfo.StatusCode,
+                IsSqlVulnerable = isSqlInjection,
+                SqlInjectionSign = sqlInjectionSign,
+                ResponseLength = responseInfo.Content.Length
+            };
+        }
+        catch (Exception)
+        {
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Проверка POST-запроса на поиск boolean-based SQL-инъекции по паре нагрузок.
     /// </summary>
     /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
@@ -207,20 +294,22 @@ public class SqlInjectionScanner
                 SqlInjectionSign = sqlInjectionSign,
                 ResponseLength = trueResponseInfo.Content.Length
             };
-        } 
+        }
         catch (Exception)
         {
             throw;
         }
     }
+    #endregion
 
+    #region Execute requests
     /// <summary>
     /// Выполнение GET-запроса с тестовой нагрузкой.
     /// </summary>
     /// <param name="endpoint">Эндпоинт</param>
     /// <param name="payload">Полезная нагрузка</param>
     /// <returns></returns>
-    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds)> ExecuteGetRequest(string endpoint, string payload)
+    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds, int MeasurementsCount)> ExecuteGetRequest(string endpoint, string payload)
     {
         string encodedPayload = Uri.EscapeDataString(payload);
         var testUrl = _baseUrl + endpoint + encodedPayload;
@@ -230,7 +319,34 @@ public class SqlInjectionScanner
         stopwatch.Stop();
 
         var content = await response.Content.ReadAsStringAsync();
-        return (content, response.StatusCode, stopwatch.ElapsedMilliseconds);
+        return (content, response.StatusCode, stopwatch.ElapsedMilliseconds, 1);
+    }
+
+    /// <summary>
+    /// Выполнение GET-запроса несколько раз для расчёта среднего времени ответа.
+    /// </summary>
+    /// <param name="endpoint">Эндпоинт</param>
+    /// <param name="payload">Полезная нагрузка</param>
+    /// <param name="measurementsCount">Количество замеров</param>
+    /// <returns></returns>
+    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds, int MeasurementsCount)> ExecuteGetRequestWithAverageTiming(
+        string endpoint, string payload, int measurementsCount)
+    {
+        long totalElapsedMilliseconds = 0;
+        string content = string.Empty;
+        HttpStatusCode statusCode = HttpStatusCode.OK;
+
+        // Для time-based проверки усредняем несколько одинаковых запросов, чтобы снизить влияние сетевых задержек.
+        for (int measurementIndex = 0; measurementIndex < measurementsCount; measurementIndex++)
+        {
+            var responseInfo = await ExecuteGetRequest(endpoint, payload);
+            totalElapsedMilliseconds += responseInfo.ElapsedMilliseconds;
+            content = responseInfo.Content;
+            statusCode = responseInfo.StatusCode;
+        }
+
+        long averageElapsedMilliseconds = (long)Math.Round((double)totalElapsedMilliseconds / measurementsCount);
+        return (content, statusCode, averageElapsedMilliseconds, measurementsCount);
     }
 
     /// <summary>
@@ -239,7 +355,8 @@ public class SqlInjectionScanner
     /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
     /// <param name="payload">Полезная нагрузка</param>
     /// <returns></returns>
-    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds, string JsonBodyParams)> ExecutePostRequest(PostRequestParams postRequestInfo, string payload)
+    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds, string JsonBodyParams, int MeasurementsCount)> ExecutePostRequest(
+        PostRequestParams postRequestInfo, string payload)
     {
         string testUrl = _baseUrl + postRequestInfo.Endpoint;
 
@@ -265,9 +382,40 @@ public class SqlInjectionScanner
         stopwatch.Stop();
 
         var content = await response.Content.ReadAsStringAsync();
-        return (content, response.StatusCode, stopwatch.ElapsedMilliseconds, jsonContent);
+        return (content, response.StatusCode, stopwatch.ElapsedMilliseconds, jsonContent, 1);
     }
 
+    /// <summary>
+    /// Выполнение POST-запроса несколько раз для расчёта среднего времени ответа.
+    /// </summary>
+    /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
+    /// <param name="payload">Полезная нагрузка</param>
+    /// <param name="measurementsCount">Количество замеров</param>
+    /// <returns></returns>
+    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds, string JsonBodyParams, int MeasurementsCount)> ExecutePostRequestWithAverageTiming(
+        PostRequestParams postRequestInfo, string payload, int measurementsCount)
+    {
+        long totalElapsedMilliseconds = 0;
+        string content = string.Empty;
+        string jsonBodyParams = string.Empty;
+        HttpStatusCode statusCode = HttpStatusCode.OK;
+
+        // Для time-based проверки усредняем несколько одинаковых запросов, чтобы снизить влияние сетевых задержек.
+        for (int measurementIndex = 0; measurementIndex < measurementsCount; measurementIndex++)
+        {
+            var responseInfo = await ExecutePostRequest(postRequestInfo, payload);
+            totalElapsedMilliseconds += responseInfo.ElapsedMilliseconds;
+            content = responseInfo.Content;
+            jsonBodyParams = responseInfo.JsonBodyParams;
+            statusCode = responseInfo.StatusCode;
+        }
+
+        long averageElapsedMilliseconds = (long)Math.Round((double)totalElapsedMilliseconds / measurementsCount);
+        return (content, statusCode, averageElapsedMilliseconds, jsonBodyParams, measurementsCount);
+    }
+    #endregion
+
+    #region Validation and recommendation methods
     /// <summary>
     /// Проверка, нашли ли SQL-инъекцию после запроса
     /// </summary>
@@ -276,7 +424,7 @@ public class SqlInjectionScanner
     /// <param name="requestTime_ms">Время выполнения запроса (в мс)</param>
     /// <param name="sqlInjectionSign">Текстовый признак обнаружения sql-инъекции</param>
     /// <returns></returns>
-    private bool IsSqlInjectionExists(string content, HttpStatusCode httpStatusCode, long requestTime_ms, out string sqlInjectionSign) 
+    private bool IsSqlInjectionExists(string content, HttpStatusCode httpStatusCode, long requestTime_ms, out string sqlInjectionSign)
     {
         // Признаки возможной SQL-инъекции
         var sqlErrors = new List<string>
@@ -304,21 +452,15 @@ public class SqlInjectionScanner
         // Проверка на ошибки СУБД в ответе
         foreach (var error in sqlErrors)
         {
-            if (content.ToLower().Contains(error)) 
+            if (content.ToLower().Contains(error))
             {
                 sqlInjectionSign = $"В контенте при выполнении запроса вернулась ошибка: {error}";
                 return true;
             }
         }
 
-        if (requestTime_ms >= SqlInjectionTestData.TimeValueForTimeBasedBlind_s * 1000 - 1000) 
-        {
-            sqlInjectionSign = $"Слишком большое время выполнения sql-запроса ({requestTime_ms})";
-            return true;
-        }
-
         // Необычные коды статусов
-        if (httpStatusCode != HttpStatusCode.OK) 
+        if (httpStatusCode != HttpStatusCode.OK)
         {
             sqlInjectionSign = $"В результате выполнения запроса вернулся необычный код {httpStatusCode}";
             return true;
@@ -332,12 +474,30 @@ public class SqlInjectionScanner
         }
 
         // Необычно длинные или короткие ответы
-        if (content.Length < 50 || content.Length > 10000) 
+        if (content.Length < 50 || content.Length > 10000)
         {
             sqlInjectionSign = $"Вернулся контент необычной длины: {content.Length}";
             return true;
         }
 
+        sqlInjectionSign = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Проверка, нашли ли time-based SQL-инъекцию по усреднённому времени ответа.
+    /// </summary>
+    /// <param name="requestTime_ms">Время выполнения запроса (в мс)</param>
+    /// <param name="measurementsCount">Количество измерений времени выполнения запроса</param>
+    /// <param name="sqlInjectionSign">Текстовый признак обнаружения sql-инъекции</param>
+    /// <returns>Возвращает true, если обнаружена time-based SQL-инъекция, иначе false</returns>
+    bool IsTimeBasedSqlInjectionExists(long requestTime_ms, int measurementsCount, out string sqlInjectionSign)
+    {
+        if (requestTime_ms >= SqlInjectionTestData.TimeValueForTimeBasedBlind_s * 1000 - 1000)
+        {
+            sqlInjectionSign = $"Среднее время выполнения {measurementsCount} sql-запросов слишком большое ({requestTime_ms} мс)";
+            return true;
+        }
         sqlInjectionSign = string.Empty;
         return false;
     }
@@ -448,7 +608,7 @@ public class SqlInjectionScanner
             // Проверяем наличие JSON-паттернов
             foreach (var pattern in jsonPatterns)
             {
-                if (compactContent.Contains(pattern.ToLower())) 
+                if (compactContent.Contains(pattern.ToLower()))
                 {
                     sqlInjectionSign = $"Вернувшийся контент имеет признак вернувшейся JSON-структуры с данными {pattern}";
                     return true;
@@ -514,9 +674,9 @@ public class SqlInjectionScanner
     /// </summary>
     /// <param name="sqlInjectionType">Тип SQL-инъекции</param>
     /// <returns></returns>
-    public string GetRecommendationForSqlInjection(SqlInjectionType sqlInjectionType) 
+    public string GetRecommendationForSqlInjection(SqlInjectionType sqlInjectionType)
     {
-        switch (sqlInjectionType) 
+        switch (sqlInjectionType)
         {
             case SqlInjectionType.ClassicSqlInjection:
                 return "**Меры устранения:**\r\n" +
@@ -557,4 +717,5 @@ public class SqlInjectionScanner
                 return string.Empty;
         }
     }
+    #endregion
 }
