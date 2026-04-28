@@ -458,13 +458,6 @@ public class SqlInjectionScanner
             }
         }
 
-        // Необычные коды статусов
-        if (httpStatusCode != HttpStatusCode.OK)
-        {
-            sqlInjectionSign = $"В результате выполнения запроса вернулся необычный код {httpStatusCode}";
-            return true;
-        }
-
         // Проверка на наличие JSON-данных (например, информация о пользователе)
         if (HasSensitiveJsonData(content, out string sensitiveJsonDateSign))
         {
