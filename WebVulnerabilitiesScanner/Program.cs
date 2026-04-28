@@ -1,8 +1,9 @@
-﻿using WebVulnerabilitiesScanner.Extentions;
+using System.Diagnostics;
+using WebVulnerabilitiesScanner.Extentions;
 using WebVulnerabilitiesScanner.Helpers;
 using static WebVulnerabilitiesScanner.TestData.SqlInjectionTestData;
 
-namespace WebVulnerabilitiesScanner 
+namespace WebVulnerabilitiesScanner
 {
     class Programm()
     {
@@ -20,30 +21,39 @@ namespace WebVulnerabilitiesScanner
 
             // Запрос ввода урла портала
             Enum.TryParse(stringPortalType, out PortalType portalType);
-            Console.Write("Введите url портала, на котором будет происходить сканирование: ");
+            Console.Write("Введите url портала, на котором будет происходить сканирование (например: http://example.com): ");
             string baseUrl = Console.ReadLine();
 
-            // Сканируем на наличие SQL-инъекций и выводим результаты
+            // Сканируем на наличие SQL-инъекций и сохраняем HTML-отчёт.
             var scanner = new SqlInjectionScanner(baseUrl, portalType);
             var results = scanner.ScanForSqlInjection();
-            var resultsWithVulnerable = results.FindAll(result => result.IsSqlVulnerable);
-            if (resultsWithVulnerable.Count > 0)
-            {
-                Console.WriteLine("Выводим найденные SQL-инъекции:\n");
-                foreach (var result in resultsWithVulnerable)
-                {
-                    if (result.IsSqlVulnerable)
-                    {
-                        ConsoleHelper.WriteHttpRequestResult(result);
-                        Console.WriteLine();
-                    }
-                }
-            }
-            else
-                Console.WriteLine("SQL-инъекции не найдены!");
+            string reportFilePath = ReportFileHelper.SaveScanReport(baseUrl, portalType.GetDescription(), results);
+            Console.WriteLine($"Результаты сканирования сохранены в файл: {reportFilePath}");
+            OpenReportInBrowser(reportFilePath);
             Console.WriteLine("Конец сканирования!");
 
             //TODO: развернуть среду из CVE или БДУ ФСТЭК
+        }
+
+        /// <summary>
+        /// Открытие сохранённого HTML-отчёта в браузере по умолчанию.
+        /// </summary>
+        /// <param name="reportFilePath">Полный путь к файлу отчёта</param>
+        static void OpenReportInBrowser(string reportFilePath)
+        {
+            try
+            {
+                // Используем оболочку ОС, чтобы открыть HTML в браузере по умолчанию.
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = reportFilePath,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Не удалось автоматически открыть отчёт: {ex.Message}");
+            }
         }
     }
 }

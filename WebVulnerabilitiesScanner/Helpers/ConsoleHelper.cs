@@ -1,4 +1,5 @@
-﻿using WebVulnerabilitiesScanner.Entities;
+using System.Text;
+using WebVulnerabilitiesScanner.Entities;
 
 namespace WebVulnerabilitiesScanner.Helpers
 {
@@ -8,18 +9,30 @@ namespace WebVulnerabilitiesScanner.Helpers
         /// Вывод в консоль результата http-запроса
         /// </summary>
         /// <param name="httpResponseEntity">Сущность ответа http-запроса</param>
-        public static void WriteHttpRequestResult(HttpResponseEntity httpResponseEntity) 
+        public static void WriteHttpRequestResult(HttpResponseEntity httpResponseEntity)
         {
-            Console.WriteLine($"Полный адрес портала (с эндпоинтом): {httpResponseEntity.UrlWithEndpoint}");
-            Console.WriteLine($"Endpoint: {httpResponseEntity.Endpoint}");
-            Console.WriteLine($"Payload: {httpResponseEntity.Payload}");
-            Console.WriteLine($"Статус: {httpResponseEntity.StatusCode}");
+            Console.WriteLine(FormatHttpRequestResult(httpResponseEntity));
+        }
+
+        /// <summary>
+        /// Форматирование результата запроса в читаемый текст.
+        /// </summary>
+        /// <param name="httpResponseEntity">Сущность ответа http-запроса</param>
+        /// <returns>Строковое представление результата запроса</returns>
+        public static string FormatHttpRequestResult(HttpResponseEntity httpResponseEntity)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine($"Полный адрес портала (с эндпоинтом): {httpResponseEntity.UrlWithEndpoint}");
+            builder.AppendLine($"Endpoint: {httpResponseEntity.Endpoint}");
+            builder.AppendLine($"Payload: {httpResponseEntity.Payload}");
+            builder.AppendLine($"Статус: {httpResponseEntity.StatusCode}");
             if (httpResponseEntity.RequestType == "POST")
-                Console.WriteLine($"Тело запроса: {httpResponseEntity.JsonBodyParams}");
-            Console.WriteLine($"Тип запроса: {httpResponseEntity.RequestType}");
-            Console.WriteLine($"Тип SQL-инъекции: {httpResponseEntity.SqlInjectionType}");
-            Console.WriteLine($"Признак, по которому определили, что словили Sql-инъекцию: {httpResponseEntity.SqlInjectionSign}");
-            Console.WriteLine($"Рекомендация к исправлению:{Environment.NewLine}" + httpResponseEntity.FixRecommendation);
+                builder.AppendLine($"Тело запроса: {httpResponseEntity.JsonBodyParams}");
+            builder.AppendLine($"Тип запроса: {httpResponseEntity.RequestType}");
+            builder.AppendLine($"Тип SQL-инъекции: {httpResponseEntity.SqlInjectionType}");
+            builder.AppendLine($"Признак, по которому определили, что словили Sql-инъекцию: {httpResponseEntity.SqlInjectionSign}");
+            builder.Append($"Рекомендация к исправлению:{Environment.NewLine}{httpResponseEntity.FixRecommendation}");
+            return builder.ToString();
         }
     }
 }
