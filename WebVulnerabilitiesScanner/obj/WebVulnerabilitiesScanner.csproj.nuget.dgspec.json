@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\bychkov\\source\\repos\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj": {}
+    "C:\\Users\\bychkov\\Documents\\TestSqlScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj": {}
   },
   "projects": {
-    "C:\\Users\\bychkov\\source\\repos\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj": {
+    "C:\\Users\\bychkov\\Documents\\TestSqlScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\bychkov\\source\\repos\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj",
+        "projectUniqueName": "C:\\Users\\bychkov\\Documents\\TestSqlScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj",
         "projectName": "WebVulnerabilitiesScanner",
-        "projectPath": "C:\\Users\\bychkov\\source\\repos\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj",
+        "projectPath": "C:\\Users\\bychkov\\Documents\\TestSqlScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj",
         "packagesPath": "C:\\Users\\bychkov\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\bychkov\\source\\repos\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner\\obj\\",
+        "outputPath": "C:\\Users\\bychkov\\Documents\\TestSqlScanner\\WebVulnerabilitiesScanner\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
