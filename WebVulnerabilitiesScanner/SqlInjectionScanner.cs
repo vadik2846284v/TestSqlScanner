@@ -30,7 +30,6 @@ public class SqlInjectionScanner
     /// <summary>
     /// Сканирование урла на наличие SQL-инъекций
     /// </summary>
-    /// <param name="baseUrl">Адрес портала</param>
     /// <returns></returns>
     public List<HttpResponseEntity> ScanForSqlInjection()
     {
@@ -470,13 +469,6 @@ public class SqlInjectionScanner
         if (HasSensitiveJsonData(content, out string sensitiveJsonDateSign))
         {
             sqlInjectionSign = sensitiveJsonDateSign;
-            return true;
-        }
-
-        // Необычно длинные или короткие ответы
-        if (content.Length < 50 || content.Length > 10000)
-        {
-            sqlInjectionSign = $"Вернулся контент необычной длины: {content.Length}";
             return true;
         }
 
