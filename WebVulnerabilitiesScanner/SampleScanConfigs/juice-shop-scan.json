@@ -1,15 +1,31 @@
 {
-  "name": "Juice Shop JSON config",
+  "name": "Juice Shop Extended SQLi Scan Config",
   "baseUrl": "http://localhost:3000",
+
   "getEndpoints": [
-    "/rest/products/search?q="
+    "/rest/products/search?q=",
+    "/api/Products?search=",
+    "/api/Users?email=",
   ],
+
   "postRequests": [
     {
       "endpoint": "/rest/user/login",
       "body": {
-        "email": "test@test.ru",
-        "password": 123456
+        "email": "test@test.com",
+        "password": "123456"
+      }
+    },
+    {
+      "endpoint": "/api/Users/",
+      "body": {
+        "email": "test@test.com",
+        "password": "123456",
+        "passwordRepeat": "123456",
+        "securityQuestion": {
+          "id": 1
+        },
+        "securityAnswer": "test"
       }
     },
     {
@@ -18,6 +34,29 @@
         "UserId": 1,
         "answer": "test",
         "SecurityQuestionId": 1
+      }
+    },
+    {
+      "endpoint": "/api/BasketItems/",
+      "body": {
+        "ProductId": 1,
+        "BasketId": 1,
+        "quantity": 1
+      }
+    },
+    {
+      "endpoint": "/rest/products/reviews",
+      "body": {
+        "message": "test review",
+        "author": "tester"
+      }
+    },
+    {
+      "endpoint": "/rest/user/change-password",
+      "body": {
+        "currentPassword": "123456",
+        "newPassword": "newpass123",
+        "newPasswordRepeat": "newpass123"
       }
     }
   ]

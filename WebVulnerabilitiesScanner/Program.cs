@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using WebVulnerabilitiesScanner.Entities;
-using WebVulnerabilitiesScanner.Extentions;
 using WebVulnerabilitiesScanner.Helpers;
-using static WebVulnerabilitiesScanner.TestData.SqlInjectionTestData;
 
 namespace WebVulnerabilitiesScanner
 {
@@ -12,18 +10,19 @@ namespace WebVulnerabilitiesScanner
         {
             try
             {
-                Console.Write("Введите путь к JSON-файлу с эндпоинтами или нажмите Enter для встроенного набора: ");
+                Console.Write("Введите путь к JSON-файлу с эндпоинтами: ");
                 string? jsonFilePath = Console.ReadLine();
                 Console.WriteLine();
 
-                if (!string.IsNullOrWhiteSpace(jsonFilePath))
+                var jsonFileLoader = new JsonScanInputConfigurationLoader(jsonFilePath);
+                while (!jsonFileLoader.IsFileExists)
                 {
-                    var loadedJsonConfiguration = JsonScanInputConfigurationLoader.Load(jsonFilePath);
-                    RunScanFromJsonConfiguration(loadedJsonConfiguration);
-                    return;
+                    Console.WriteLine("Указанный файл не найден. Пожалуйста, введите корректный путь к JSON-файлу:");
+                    jsonFilePath = Console.ReadLine();
+                    jsonFileLoader = new JsonScanInputConfigurationLoader(jsonFilePath);
                 }
-
-                RunBuiltInScan();
+                var loadedJsonConfiguration = jsonFileLoader.Load();
+                RunScanFromJsonConfiguration(loadedJsonConfiguration);
             }
             catch (Exception ex)
             {
@@ -45,34 +44,6 @@ namespace WebVulnerabilitiesScanner
             var scanner = new SqlInjectionScanner(baseUrl);
             var results = scanner.ScanForSqlInjection(jsonConfiguration.GetRequestEndpoints, jsonConfiguration.PostRequestsInfo);
             string reportFilePath = ReportFileHelper.SaveScanReport(baseUrl, configurationName, results);
-
-            Console.WriteLine($"Результаты сканирования сохранены в файл: {reportFilePath}");
-            OpenReportInBrowser(reportFilePath);
-            Console.WriteLine("Конец сканирования!");
-        }
-
-        /// <summary>
-        /// Запуск сканирования по встроенному набору тестовых данных.
-        /// </summary>
-        private static void RunBuiltInScan()
-        {
-            Console.WriteLine("Введите номер типа портала, который будем сканировать");
-            foreach (PortalType availablePortalType in Enum.GetValues(typeof(PortalType)))
-            {
-                Console.WriteLine($"{(int)availablePortalType} = {availablePortalType.GetDescription()}");
-            }
-
-            Console.Write("Тип портала: ");
-            string? portalTypeInput = Console.ReadLine();
-            Console.WriteLine();
-
-            if (!Enum.TryParse(portalTypeInput, out PortalType portalType))
-                throw new InvalidOperationException("Не удалось распознать тип портала.");
-
-            string baseUrl = ResolveBaseUrl(null);
-            var scanner = new SqlInjectionScanner(baseUrl, portalType);
-            var results = scanner.ScanForSqlInjection();
-            string reportFilePath = ReportFileHelper.SaveScanReport(baseUrl, portalType.GetDescription(), results);
 
             Console.WriteLine($"Результаты сканирования сохранены в файл: {reportFilePath}");
             OpenReportInBrowser(reportFilePath);

@@ -6,8 +6,12 @@ namespace WebVulnerabilitiesScanner.Helpers
     /// <summary>
     /// Загрузка входной конфигурации сканирования из JSON-файлов.
     /// </summary>
-    public static class JsonScanInputConfigurationLoader
+    public class JsonScanInputConfigurationLoader
     {
+        private string _filePath;
+
+        public bool IsFileExists => File.Exists(_filePath);
+
         private static readonly JsonSerializerOptions JsonSerializerOptions = new()
         {
             PropertyNameCaseInsensitive = true,
@@ -15,22 +19,23 @@ namespace WebVulnerabilitiesScanner.Helpers
             AllowTrailingCommas = true
         };
 
+        public JsonScanInputConfigurationLoader(string filePath)
+        {
+            _filePath = filePath;
+        }
+
         /// <summary>
         /// Загрузка конфигурации из JSON-файла.
         /// </summary>
-        /// <param name="filePath">Путь к JSON-файлу</param>
         /// <returns>Готовая конфигурация сканирования</returns>
-        public static ScanInputConfiguration Load(string filePath)
+        public ScanInputConfiguration Load()
         {
-            if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("Не передан путь к JSON-файлу с конфигурацией сканирования.");
+            if (!IsFileExists)
+                throw new FileNotFoundException($"Не найден JSON-файл конфигурации: {_filePath}");
 
-            if (!File.Exists(filePath))
-                throw new FileNotFoundException($"Не найден JSON-файл конфигурации: {filePath}");
-
-            string fileContent = File.ReadAllText(filePath);
+            string fileContent = File.ReadAllText(_filePath);
             var configuration = JsonSerializer.Deserialize<ScanInputConfiguration>(fileContent, JsonSerializerOptions)
-                ?? throw new InvalidOperationException($"Не удалось прочитать JSON-конфигурацию: {filePath}");
+                ?? throw new InvalidOperationException($"Не удалось прочитать JSON-конфигурацию: {_filePath}");
 
             ValidateConfiguration(configuration);
             return configuration;

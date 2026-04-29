@@ -15,8 +15,6 @@ public class SqlInjectionScanner
 
     private readonly HttpClient _httpClient;
 
-    private readonly PortalType? _portalType;
-
     public SqlInjectionScanner(string baseUrl)
     {
         _baseUrl = baseUrl;
@@ -24,25 +22,6 @@ public class SqlInjectionScanner
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
-    }
-
-    public SqlInjectionScanner(string baseUrl, PortalType portalType)
-        : this(baseUrl)
-    {
-        _portalType = portalType;
-    }
-
-    /// <summary>
-    /// Сканирование урла на наличие SQL-инъекций
-    /// </summary>
-    /// <returns></returns>
-    public List<HttpResponseEntity> ScanForSqlInjection()
-    {
-        if (!_portalType.HasValue)
-            throw new InvalidOperationException("Не задан тип портала для встроенного набора тестовых данных.");
-
-        SqlInjectionTestData.GetTestDataByPortalType(_portalType.Value, out List<string> getRequestsEndpoints, out List<PostRequestParams> postRequestsInfo);
-        return ScanForSqlInjection(getRequestsEndpoints, postRequestsInfo);
     }
 
     /// <summary>
