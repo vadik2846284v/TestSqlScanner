@@ -15,15 +15,20 @@ public class SqlInjectionScanner
 
     private readonly HttpClient _httpClient;
 
-    private readonly PortalType _portalType;
+    private readonly PortalType? _portalType;
 
-    public SqlInjectionScanner(string baseUrl, PortalType portalType)
+    public SqlInjectionScanner(string baseUrl)
     {
         _baseUrl = baseUrl;
         _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
+    }
+
+    public SqlInjectionScanner(string baseUrl, PortalType portalType)
+        : this(baseUrl)
+    {
         _portalType = portalType;
     }
 
@@ -33,7 +38,21 @@ public class SqlInjectionScanner
     /// <returns></returns>
     public List<HttpResponseEntity> ScanForSqlInjection()
     {
-        SqlInjectionTestData.GetTestDataByPortalType(_portalType, out List<string> getRequestsEndpoints, out List<PostRequestParams> postRequestsInfo);
+        if (!_portalType.HasValue)
+            throw new InvalidOperationException("Не задан тип портала для встроенного набора тестовых данных.");
+
+        SqlInjectionTestData.GetTestDataByPortalType(_portalType.Value, out List<string> getRequestsEndpoints, out List<PostRequestParams> postRequestsInfo);
+        return ScanForSqlInjection(getRequestsEndpoints, postRequestsInfo);
+    }
+
+    /// <summary>
+    /// Сканирование по явно переданным GET и POST запросам.
+    /// </summary>
+    /// <param name="getRequestsEndpoints">Эндпоинты GET-запросов</param>
+    /// <param name="postRequestsInfo">Информация для POST-запросов</param>
+    /// <returns>Результаты сканирования</returns>
+    public List<HttpResponseEntity> ScanForSqlInjection(List<string> getRequestsEndpoints, List<PostRequestParams> postRequestsInfo)
+    {
         var results = new List<HttpResponseEntity>();
         // Boolean-based и time-based payload'ы обрабатываются отдельно, потому что требуют специальной логики проверки.
         var singleCheckPayloads = SqlInjectionTestData.BasePayloadsInfo.FindAll(payloadInfo =>

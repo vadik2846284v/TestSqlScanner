@@ -1,0 +1,24 @@
+{
+  "name": "Juice Shop JSON config",
+  "baseUrl": "http://localhost:3000",
+  "getEndpoints": [
+    "/rest/products/search?q="
+  ],
+  "postRequests": [
+    {
+      "endpoint": "/rest/user/login",
+      "body": {
+        "email": "test@test.ru",
+        "password": 123456
+      }
+    },
+    {
+      "endpoint": "/api/SecurityAnswers/",
+      "body": {
+        "UserId": 1,
+        "answer": "test",
+        "SecurityQuestionId": 1
+      }
+    }
+  ]
+}
