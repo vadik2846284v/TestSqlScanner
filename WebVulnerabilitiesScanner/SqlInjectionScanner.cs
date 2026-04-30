@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using WebVulnerabilitiesScanner.Entities;
+using WebVulnerabilitiesScanner.Helpers;
 using WebVulnerabilitiesScanner.TestData;
 
 /// <summary>
@@ -36,27 +37,44 @@ public class SqlInjectionScanner
         var singleCheckPayloads = SqlInjectionTestData.BasePayloadsInfo.FindAll(payloadInfo =>
             payloadInfo.SqlInjectionType != SqlInjectionType.BooleanBased &&
             payloadInfo.SqlInjectionType != SqlInjectionType.TimeBasedBlind);
+        int checksPerEndpoint = singleCheckPayloads.Count
+            + SqlInjectionTestData.TimeBasedBlindPayloadsInfo.Count
+            + SqlInjectionTestData.BooleanBasedPayloadPairs.Count;
+        int totalChecks = CalculateTotalChecks(getRequestsEndpoints.Count, postRequestsInfo.Count, checksPerEndpoint);
+        int currentCheck = 0;
+
+        if (totalChecks == 0)
+        {
+            ConsoleHelper.WriteNoChecksMessage();
+            return results;
+        }
+
+        ConsoleHelper.WriteScanStart(totalChecks);
 
         foreach (var endpointInfo in getRequestsEndpoints)
         {
             foreach (var payloadInfo in singleCheckPayloads)
             {
+                ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "GET", endpointInfo, payloadInfo.Payload);
                 var result = TestGetRequest(endpointInfo, payloadInfo);
-                results.Add(result.Result);
+                results.Add(result.GetAwaiter().GetResult());
             }
 
             foreach (var payloadInfo in SqlInjectionTestData.TimeBasedBlindPayloadsInfo)
             {
                 // Для time-based проверки отправляем несколько одинаковых запросов и считаем среднее время ответа.
+                ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "GET", endpointInfo, payloadInfo.Payload);
                 var result = TestTimeBasedGetRequest(endpointInfo, payloadInfo);
-                results.Add(result.Result);
+                results.Add(result.GetAwaiter().GetResult());
             }
 
             foreach (var booleanPayloadPair in SqlInjectionTestData.BooleanBasedPayloadPairs)
             {
                 // Для слепой boolean-based проверки отправляем обе ветки: true и false.
+                string payloadDescription = BuildBooleanPayloadDescription(booleanPayloadPair);
+                ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "GET", endpointInfo, payloadDescription);
                 var result = TestBooleanBasedGetRequest(endpointInfo, booleanPayloadPair);
-                results.Add(result.Result);
+                results.Add(result.GetAwaiter().GetResult());
             }
         }
 
@@ -64,26 +82,52 @@ public class SqlInjectionScanner
         {
             foreach (var payloadInfo in singleCheckPayloads)
             {
+                ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "POST", endpointInfo.Endpoint, payloadInfo.Payload);
                 var result = TestPostRequest(endpointInfo, payloadInfo);
-                results.Add(result.Result);
+                results.Add(result.GetAwaiter().GetResult());
             }
 
             foreach (var payloadInfo in SqlInjectionTestData.TimeBasedBlindPayloadsInfo)
             {
                 // Для time-based проверки отправляем несколько одинаковых запросов и считаем среднее время ответа.
+                ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "POST", endpointInfo.Endpoint, payloadInfo.Payload);
                 var result = TestTimeBasedPostRequest(endpointInfo, payloadInfo);
-                results.Add(result.Result);
+                results.Add(result.GetAwaiter().GetResult());
             }
 
             foreach (var booleanPayloadPair in SqlInjectionTestData.BooleanBasedPayloadPairs)
             {
                 // Для слепой boolean-based проверки отправляем обе ветки: true и false.
+                string payloadDescription = BuildBooleanPayloadDescription(booleanPayloadPair);
+                ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "POST", endpointInfo.Endpoint, payloadDescription);
                 var result = TestBooleanBasedPostRequest(endpointInfo, booleanPayloadPair);
-                results.Add(result.Result);
+                results.Add(result.GetAwaiter().GetResult());
             }
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Вычисляет общее количество логических проверок для всех GET- и POST-эндпоинтов.
+    /// </summary>
+    /// <param name="getEndpointsCount">Количество GET-эндпоинтов.</param>
+    /// <param name="postEndpointsCount">Количество POST-эндпоинтов.</param>
+    /// <param name="checksPerEndpoint">Количество проверок, выполняемых для одного эндпоинта.</param>
+    /// <returns>Общее количество проверок для всего сканирования.</returns>
+    private static int CalculateTotalChecks(int getEndpointsCount, int postEndpointsCount, int checksPerEndpoint)
+    {
+        return (getEndpointsCount + postEndpointsCount) * checksPerEndpoint;
+    }
+
+    /// <summary>
+    /// Формирует строковое описание пары boolean-based payload'ов для вывода в прогрессе и отчёте об ошибке.
+    /// </summary>
+    /// <param name="payloadPair">Пара payload'ов для истинной и ложной ветки boolean-based проверки.</param>
+    /// <returns>Строка с описанием TRUE и FALSE payload'ов.</returns>
+    private static string BuildBooleanPayloadDescription(BooleanBasedPayloadPairEntity payloadPair)
+    {
+        return $"TRUE: {payloadPair.TruePayloadInfo.Payload}; FALSE: {payloadPair.FalsePayloadInfo.Payload}";
     }
 
     #region GET Methods tests
