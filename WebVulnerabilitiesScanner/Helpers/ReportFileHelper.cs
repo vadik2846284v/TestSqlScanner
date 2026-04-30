@@ -9,7 +9,7 @@ namespace WebVulnerabilitiesScanner.Helpers
     /// </summary>
     public static class ReportFileHelper
     {
-        private const string ReportTemplateRelativePath = "Templates\\ScanReportTemplate.html";
+        private static readonly string ReportTemplateRelativePath = Path.Combine("Templates", "ScanReportTemplate.html");
 
         /// <summary>
         /// Сохранение результатов сканирования в html-файл.
