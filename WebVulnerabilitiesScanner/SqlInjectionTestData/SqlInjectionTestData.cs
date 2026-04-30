@@ -76,8 +76,8 @@ namespace WebVulnerabilitiesScanner.TestData
                 new RequestSqlInjectionPayloadEntity("' OR 'a'='a'--", SqlInjectionType.BooleanBased),
                 new RequestSqlInjectionPayloadEntity("' OR 'a'='b'--", SqlInjectionType.BooleanBased)),
             new BooleanBasedPayloadPairEntity(
-                new RequestSqlInjectionPayloadEntity("' AND LENGTH('test')=4--", SqlInjectionType.BooleanBased),
-                new RequestSqlInjectionPayloadEntity("' AND LENGTH('test')=5--", SqlInjectionType.BooleanBased)),
+                new RequestSqlInjectionPayloadEntity("' AND (SELECT 1)=1--", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' AND (SELECT 1)=2--", SqlInjectionType.BooleanBased)),
             new BooleanBasedPayloadPairEntity(
                 new RequestSqlInjectionPayloadEntity("' AND ASCII(SUBSTRING('A',1,1))=65--", SqlInjectionType.BooleanBased),
                 new RequestSqlInjectionPayloadEntity("' AND ASCII(SUBSTRING('A',1,1))=66--", SqlInjectionType.BooleanBased)),

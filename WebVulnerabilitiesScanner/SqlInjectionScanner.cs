@@ -11,13 +11,74 @@ using WebVulnerabilitiesScanner.TestData;
 /// </summary>
 public class SqlInjectionScanner
 {
+    /// <summary>
+    /// Минимальный таймаут HTTP-клиента в секундах для обычных запросов.
+    /// </summary>
     private const int DefaultHttpClientTimeoutSeconds = 10;
 
+    /// <summary>
+    /// Дополнительный запас времени в секундах для time-based payload'ов.
+    /// </summary>
     private const int TimeBasedTimeoutSafetyBufferSeconds = 3;
 
+    /// <summary>
+    /// Минимальное количество совпавших low-signal JSON-полей, необходимое для признания ответа чувствительным.
+    /// </summary>
+    private const int SensitiveJsonKeywordThreshold = 2;
+
+    /// <summary>
+    /// Базовый URL сканируемого приложения.
+    /// </summary>
     private readonly string _baseUrl;
 
+    /// <summary>
+    /// HTTP-клиент, используемый для отправки тестовых запросов.
+    /// </summary>
     private readonly HttpClient _httpClient;
+
+    /// <summary>
+    /// Имена JSON-полей с высоким сигналом, которые сами по себе считаются признаком чувствительных данных.
+    /// </summary>
+    private static readonly HashSet<string> HighSignalSensitiveJsonPropertyNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "password",
+        "username",
+        "email",
+        "access_token",
+        "refresh_token",
+        "api_key",
+        "secret",
+        "ssn",
+        "phone_number",
+        "mobile"
+    };
+
+    /// <summary>
+    /// Имена JSON-полей со средним сигналом, которые считаются значимыми только при нескольких совпадениях.
+    /// </summary>
+    private static readonly HashSet<string> SensitiveJsonKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "user",
+        "users",
+        "username",
+        "password",
+        "email",
+        "e-mail",
+        "token",
+        "access_token",
+        "refresh_token",
+        "phone",
+        "telephone",
+        "credit",
+        "ssn",
+        "salary",
+        "birth",
+        "secret",
+        "api_key",
+        "session",
+        "auth",
+        "permission"
+    };
 
     public SqlInjectionScanner(string baseUrl)
     {
@@ -126,14 +187,13 @@ public class SqlInjectionScanner
     }
 
     /// <summary>
-    /// Вычисляет таймаут HttpClient с учётом длительности time-based payload'ов и количества замеров.
+    /// Вычисляет таймаут HttpClient с учётом длительности одного time-based payload'а.
     /// </summary>
-    /// <returns>Таймаут, достаточный для выполнения самой долгой time-based проверки с запасом.</returns>
+    /// <returns>Таймаут, достаточный для выполнения одного самого долгого time-based запроса с запасом.</returns>
     private static TimeSpan CalculateHttpClientTimeout()
     {
         int recommendedTimeoutSeconds =
-            (SqlInjectionTestData.TimeValueForTimeBasedBlind_s + TimeBasedTimeoutSafetyBufferSeconds)
-            * SqlInjectionTestData.TimeBasedBlindRequestsCountForAverage;
+            SqlInjectionTestData.TimeValueForTimeBasedBlind_s + TimeBasedTimeoutSafetyBufferSeconds;
 
         int timeoutSeconds = Math.Max(DefaultHttpClientTimeoutSeconds, recommendedTimeoutSeconds);
         return TimeSpan.FromSeconds(timeoutSeconds);
@@ -653,115 +713,89 @@ public class SqlInjectionScanner
         if (string.IsNullOrWhiteSpace(content))
             return false;
 
-        // Сначала проверяем, что это вообще JSON
-        if (!IsValidJson(content))
+        if (!TryCollectJsonPropertyNames(content, out var jsonPropertyNames))
             return false;
 
-        // Ключевые слова, указывающие на конфиденциальные данные
-        var sensitiveKeywords = new List<string>
+        string? highSignalPropertyName = jsonPropertyNames
+            .FirstOrDefault(propertyName => HighSignalSensitiveJsonPropertyNames.Contains(propertyName));
+
+        if (!string.IsNullOrWhiteSpace(highSignalPropertyName))
         {
-            "user", "users", // пользователь
-            "password", // пароль
-            "email", "e-mail", // email
-            "token", "access_token", "refresh_token", // токены
-            "phone", "telephone", // телефон
-            "address", // адрес
-            "credit", // кредитная карта
-            "ssn", // SSN
-            "salary", // зарплата
-            "birth", // дата рождения
-            "id", // идентификатор
-            "secret", // секрет
-            "api_key", // API ключ
-            "session", // сессия
-            "auth", // аутентификация
-            "role", // роль
-            "permission", // разрешение
-            "login" // логин
-        };
-
-        // Признаки JSON-структур с данными
-        var jsonPatterns = new List<string>
-        {
-            "\"username\"", "\"password\"", "\"email\"",
-            "\"first_name\"", "\"last_name\"", "\"full_name\"",
-            "\"phone_number\"", "\"mobile\"",
-            "\"address\"", "\"city\"", "\"zip\"", "\"country\"",
-            "\"created_at\"", "\"updated_at\"", "\"last_login\"",
-            "\"is_active\"", "\"is_admin\"", "\"permissions\"",
-            "\"settings\"", "\"preferences\""
-        };
-
-        try
-        {
-            // Приводим к нижнему регистру для поиска
-            string contentLower = content.ToLower();
-
-            // Удаляем пробелы и переносы строк для более надежного поиска
-            string compactContent = contentLower.Replace("\n", "").Replace("\r", "").Replace(" ", "");
-
-            // Проверяем наличие JSON-паттернов
-            foreach (var pattern in jsonPatterns)
-            {
-                if (compactContent.Contains(pattern.ToLower()))
-                {
-                    sqlInjectionSign = $"Вернувшийся контент имеет признак вернувшейся JSON-структуры с данными {pattern}";
-                    return true;
-                }
-            }
-
-            // Проверяем наличие ключевых слов в контексте JSON
-            // Ищем паттерн: "keyword": (с любыми пробелами)
-            foreach (var keyword in sensitiveKeywords)
-            {
-                // Проверяем несколько вариантов
-                if (compactContent.Contains($"\"{keyword}\":") ||
-                    compactContent.Contains($"{keyword}\":") ||
-                    compactContent.Contains($"\"{keyword}\""))
-                {
-                    sqlInjectionSign = $"Вернувшийся контент имеет паттерн в виде 'keyword': 'значение' (keyword = {keyword})";
-                    return true;
-                }
-            }
+            sqlInjectionSign = $"Вернувшийся контент содержит чувствительное JSON-поле '{highSignalPropertyName}'";
+            return true;
         }
-        catch
+
+        var matchedSensitiveKeywords = jsonPropertyNames
+            .Where(propertyName => SensitiveJsonKeywords.Contains(propertyName))
+            .OrderBy(propertyName => propertyName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (matchedSensitiveKeywords.Count >= SensitiveJsonKeywordThreshold)
         {
-            // В случае ошибки парсинга считаем, что это не JSON
-            return false;
+            sqlInjectionSign =
+                $"Вернувшийся контент содержит несколько чувствительных JSON-полей: {string.Join(", ", matchedSensitiveKeywords)}";
+            return true;
         }
 
         return false;
     }
 
     /// <summary>
-    /// Проверка валидности JSON
+    /// Пытается извлечь все имена полей из JSON-документа для последующей проверки на чувствительные данные.
     /// </summary>
-    /// <param name="strInput"></param>
-    /// <returns></returns>
-    private bool IsValidJson(string strInput)
+    /// <param name="content">Исходный JSON-контент.</param>
+    /// <param name="propertyNames">Набор имён JSON-полей, найденных в документе.</param>
+    /// <returns>True, если контент является валидным JSON; иначе false.</returns>
+    private static bool TryCollectJsonPropertyNames(string content, out HashSet<string> propertyNames)
     {
-        if (string.IsNullOrWhiteSpace(strInput))
+        propertyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(content))
             return false;
 
-        strInput = strInput.Trim();
+        string trimmedContent = content.Trim();
 
-        // Быстрая проверка по первым/последним символам
-        if ((strInput.StartsWith("{") && strInput.EndsWith("}")) ||
-            (strInput.StartsWith("[") && strInput.EndsWith("]")))
+        if (!((trimmedContent.StartsWith("{") && trimmedContent.EndsWith("}")) ||
+            (trimmedContent.StartsWith("[") && trimmedContent.EndsWith("]"))))
         {
-            try
-            {
-                // Пытаемся парсить JSON
-                using var doc = JsonDocument.Parse(strInput);
-                return true;
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
+            return false;
         }
 
-        return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmedContent);
+            CollectJsonPropertyNames(doc.RootElement, propertyNames);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Рекурсивно обходит JSON-элемент и добавляет имена всех вложенных полей в результирующий набор.
+    /// </summary>
+    /// <param name="element">Текущий JSON-элемент.</param>
+    /// <param name="propertyNames">Набор для накопления найденных имён полей.</param>
+    private static void CollectJsonPropertyNames(JsonElement element, HashSet<string> propertyNames)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    propertyNames.Add(property.Name);
+                    CollectJsonPropertyNames(property.Value, propertyNames);
+                }
+                break;
+            case JsonValueKind.Array:
+                foreach (var arrayItem in element.EnumerateArray())
+                {
+                    CollectJsonPropertyNames(arrayItem, propertyNames);
+                }
+                break;
+        }
     }
 
     /// <summary>
