@@ -11,17 +11,6 @@ namespace WebVulnerabilitiesScanner.TestData
         public const int TimeBasedBlindRequestsCountForAverage = 3;
 
         /// <summary>
-        /// Эндпоинты для GET-запросов
-        /// </summary>
-        public abstract List<string> GetRequestEndpoints { get; }
-
-        /// <summary>
-        /// Данные для POST-запросов
-        /// </summary>
-        public abstract List<PostRequestParams> PostRequestsInfo { get; }
-
-
-        /// <summary>
         /// Универсальные нагрузки для тестирования запросов
         /// </summary>
         public static readonly List<RequestSqlInjectionPayloadEntity> BasePayloadsInfo = new List<RequestSqlInjectionPayloadEntity>()
