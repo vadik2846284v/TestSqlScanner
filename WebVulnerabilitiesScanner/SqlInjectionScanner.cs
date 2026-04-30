@@ -11,6 +11,10 @@ using WebVulnerabilitiesScanner.TestData;
 /// </summary>
 public class SqlInjectionScanner
 {
+    private const int DefaultHttpClientTimeoutSeconds = 10;
+
+    private const int TimeBasedTimeoutSafetyBufferSeconds = 3;
+
     private readonly string _baseUrl;
 
     private readonly HttpClient _httpClient;
@@ -20,7 +24,8 @@ public class SqlInjectionScanner
         _baseUrl = baseUrl;
         _httpClient = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(10)
+            // Таймаут должен покрывать серию замеров time-based payload'а с небольшим запасом.
+            Timeout = CalculateHttpClientTimeout()
         };
     }
 
@@ -118,6 +123,20 @@ public class SqlInjectionScanner
     private static int CalculateTotalChecks(int getEndpointsCount, int postEndpointsCount, int checksPerEndpoint)
     {
         return (getEndpointsCount + postEndpointsCount) * checksPerEndpoint;
+    }
+
+    /// <summary>
+    /// Вычисляет таймаут HttpClient с учётом длительности time-based payload'ов и количества замеров.
+    /// </summary>
+    /// <returns>Таймаут, достаточный для выполнения самой долгой time-based проверки с запасом.</returns>
+    private static TimeSpan CalculateHttpClientTimeout()
+    {
+        int recommendedTimeoutSeconds =
+            (SqlInjectionTestData.TimeValueForTimeBasedBlind_s + TimeBasedTimeoutSafetyBufferSeconds)
+            * SqlInjectionTestData.TimeBasedBlindRequestsCountForAverage;
+
+        int timeoutSeconds = Math.Max(DefaultHttpClientTimeoutSeconds, recommendedTimeoutSeconds);
+        return TimeSpan.FromSeconds(timeoutSeconds);
     }
 
     /// <summary>
@@ -754,12 +773,6 @@ public class SqlInjectionScanner
     {
         switch (sqlInjectionType)
         {
-            case SqlInjectionType.ClassicSqlInjection:
-                return "**Меры устранения:**\r\n" +
-                    "1. Использовать параметризованные запросы (Prepared Statements)\r\n" +
-                    "2. Валидация входных данных\r\n" +
-                    "3. Использование хранимых процедур\r\n" +
-                    "4. Принцип наименьших привилегий для БД";
             case SqlInjectionType.UnionBased:
                 return "**Меры устранения:**\r\n" +
                     "1. Валидация типа данных для числовых параметров\r\n" +
