@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using WebVulnerabilitiesScanner.Entities;
 using WebVulnerabilitiesScanner.TestData;
-using static WebVulnerabilitiesScanner.TestData.SqlInjectionTestData;
 
 /// <summary>
 /// Сканнер SQL-инъекций
@@ -116,9 +115,9 @@ public class SqlInjectionScanner
                 ResponseLength = responseInfo.Content.Length
             };
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            throw;
+            return CreateFailedResponseEntity(endpoint, "GET", payloadInfo.Payload, payloadInfo.SqlInjectionType, ex);
         }
     }
 
@@ -152,9 +151,10 @@ public class SqlInjectionScanner
                 ResponseLength = trueResponseInfo.Content.Length
             };
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            throw;
+            string payloadDescription = $"TRUE: {payloadPair.TruePayloadInfo.Payload}; FALSE: {payloadPair.FalsePayloadInfo.Payload}";
+            return CreateFailedResponseEntity(endpoint, "GET", payloadDescription, SqlInjectionType.BooleanBased, ex);
         }
     }
 
@@ -185,9 +185,9 @@ public class SqlInjectionScanner
                 ResponseLength = responseInfo.Content.Length
             };
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            throw;
+            return CreateFailedResponseEntity(endpoint, "GET", payloadInfo.Payload, payloadInfo.SqlInjectionType, ex);
         }
     }
     #endregion
@@ -221,9 +221,9 @@ public class SqlInjectionScanner
                 ResponseLength = responseInfo.Content.Length
             };
         } 
-        catch (Exception)
+        catch (Exception ex)
         {
-            throw;
+            return CreateFailedResponseEntity(postRequestInfo.Endpoint, "POST", payloadInfo.Payload, payloadInfo.SqlInjectionType, ex);
         }
     }
 
@@ -255,9 +255,9 @@ public class SqlInjectionScanner
                 ResponseLength = responseInfo.Content.Length
             };
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            throw;
+            return CreateFailedResponseEntity(postRequestInfo.Endpoint, "POST", payloadInfo.Payload, payloadInfo.SqlInjectionType, ex);
         }
     }
 
@@ -292,12 +292,61 @@ public class SqlInjectionScanner
                 ResponseLength = trueResponseInfo.Content.Length
             };
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            throw;
+            string payloadDescription = $"TRUE: {payloadPair.TruePayloadInfo.Payload}; FALSE: {payloadPair.FalsePayloadInfo.Payload}";
+            return CreateFailedResponseEntity(postRequestInfo.Endpoint, "POST", payloadDescription, SqlInjectionType.BooleanBased, ex);
         }
     }
     #endregion
+
+    /// <summary>
+    /// Создание результата неуспешной проверки, чтобы отразить ошибку в отчёте и продолжить сканирование.
+    /// </summary>
+    /// <param name="endpoint">Эндпоинт, на котором произошла ошибка</param>
+    /// <param name="requestType">Тип HTTP-запроса</param>
+    /// <param name="payload">Payload, использованный в проверке</param>
+    /// <param name="sqlInjectionType">Тип проверяемой SQL-инъекции</param>
+    /// <param name="exception">Исключение, возникшее при выполнении проверки</param>
+    /// <returns>Сущность результата с признаком ошибки выполнения</returns>
+    private HttpResponseEntity CreateFailedResponseEntity(
+        string endpoint,
+        string requestType,
+        string payload,
+        SqlInjectionType sqlInjectionType,
+        Exception exception)
+    {
+        LogScanError(requestType, endpoint, payload, exception);
+
+        return new HttpResponseEntity
+        {
+            BaseUrl = _baseUrl,
+            Endpoint = endpoint,
+            Payload = payload,
+            RequestType = requestType,
+            JsonBodyParams = string.Empty,
+            SqlInjectionType = sqlInjectionType,
+            FixRecommendation = GetRecommendationForSqlInjection(sqlInjectionType),
+            StatusCode = 0,
+            IsSqlVulnerable = false,
+            IsExecutionFailed = true,
+            SqlInjectionSign = $"Проверка не выполнена: {exception.Message}",
+            ResponseLength = 0
+        };
+    }
+
+    /// <summary>
+    /// Логирование ошибки выполнения отдельной проверки без остановки всего сканирования.
+    /// </summary>
+    /// <param name="requestType">Тип HTTP-запроса</param>
+    /// <param name="endpoint">Эндпоинт, на котором произошла ошибка</param>
+    /// <param name="payload">Payload, использованный в проверке</param>
+    /// <param name="exception">Исключение, возникшее при выполнении проверки</param>
+    private void LogScanError(string requestType, string endpoint, string payload, Exception exception)
+    {
+        Console.WriteLine(
+            $"[Scanner error] Не удалось выполнить {requestType}-проверку для эндпоинта '{endpoint}' с payload '{payload}': {exception.Message}");
+    }
 
     #region Execute requests
     /// <summary>

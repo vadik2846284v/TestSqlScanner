@@ -62,6 +62,11 @@
         public bool IsSqlVulnerable { get; set; }
 
         /// <summary>
+        /// Не удалось ли выполнить проверку
+        /// </summary>
+        public bool IsExecutionFailed { get; set; }
+
+        /// <summary>
         /// Признак SQL-инъекции
         /// </summary>
         public string SqlInjectionSign { get; set; }

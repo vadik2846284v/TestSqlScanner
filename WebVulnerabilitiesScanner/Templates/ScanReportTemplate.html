@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Отчёт о сканировании SQL-инъекций</title>
+    <title>Отчет о сканировании SQL-инъекций</title>
     <style>
         :root {
             --bg: #f4f1ea;
@@ -14,6 +14,8 @@
             --border: #d9cdbd;
             --danger: #a63d40;
             --danger-soft: #f6d7d8;
+            --warning: #9a6700;
+            --warning-soft: #f8ebc6;
             --success: #2f6b4f;
             --success-soft: #dcefe3;
             --shadow: 0 12px 30px rgba(72, 46, 28, 0.08);
@@ -125,6 +127,12 @@
             border-color: rgba(47, 107, 79, 0.22);
         }
 
+        .chip.failed {
+            color: var(--warning);
+            background: var(--warning-soft);
+            border-color: rgba(154, 103, 0, 0.22);
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -153,6 +161,10 @@
             background: rgba(220, 239, 227, 0.2);
         }
 
+        tr.failed-row {
+            background: rgba(248, 235, 198, 0.42);
+        }
+
         .badge {
             display: inline-block;
             min-width: 108px;
@@ -172,6 +184,11 @@
         .badge.safe {
             color: var(--success);
             background: var(--success-soft);
+        }
+
+        .badge.failed {
+            color: var(--warning);
+            background: var(--warning-soft);
         }
 
         .details-list {
@@ -247,15 +264,13 @@
 </head>
 <body>
     <div class="page">
-        <!-- Заголовок отчёта с общей информацией о запуске сканирования. -->
         <section class="hero">
-            <h1>Отчёт о результатах сканирования SQL-инъекций</h1>
+            <h1>Отчет о результатах сканирования SQL-инъекций</h1>
             <p><strong>Дата и время сканирования:</strong> {{ GeneratedAt }}</p>
             <p><strong>Тип портала:</strong> {{ PortalTypeDescription }}</p>
             <p><strong>Базовый адрес портала:</strong> <span class="mono">{{ BaseUrl }}</span></p>
         </section>
 
-        <!-- Сводные числовые показатели по выполненному сканированию. -->
         <section class="section">
             <h2>Сводная статистика</h2>
             <div class="stats">
@@ -272,13 +287,16 @@
                     <span class="value">{{ SafeChecks }}</span>
                 </div>
                 <div class="stat-card">
+                    <span class="label">Проверок с ошибкой выполнения</span>
+                    <span class="value">{{ FailedChecks }}</span>
+                </div>
+                <div class="stat-card">
                     <span class="label">Процент срабатываний</span>
                     <span class="value">{{ VulnerablePercent }}%</span>
                 </div>
             </div>
         </section>
 
-        <!-- Распределение найденных срабатываний по типам SQL-инъекций. -->
         <section class="section">
             <h2>Распределение по типам</h2>
             <div class="chips">
@@ -289,10 +307,13 @@
                 {{ else }}
                     <span class="chip safe">Потенциальные SQL-инъекции не найдены</span>
                 {{ end }}
+
+                {{ if FailedChecks > 0 }}
+                    <span class="chip failed">Ошибки выполнения: {{ FailedChecks }}</span>
+                {{ end }}
             </div>
         </section>
 
-        <!-- Детализация только по найденным потенциальным уязвимостям. -->
         <section class="section">
             <h2>Детализация найденных потенциальных SQL-инъекций</h2>
             {{ if Vulnerabilities.size > 0 }}
@@ -318,7 +339,31 @@
             {{ end }}
         </section>
 
-        <!-- Полный список всех выполненных проверок для общей картины прохода. -->
+        <section class="section">
+            <h2>Ошибки выполнения проверок</h2>
+            {{ if FailedChecksDetails.size > 0 }}
+                <div class="details-list">
+                    {{ for failure in FailedChecksDetails }}
+                        <details>
+                            <summary>Проверка #{{ failure.Index }}: {{ failure.SqlInjectionType }} | {{ failure.RequestType }} | {{ failure.Endpoint }}</summary>
+                            <div class="details-body">
+                                <div class="details-grid">
+                                    {{ for details_item in failure.Details }}
+                                        <div class="details-item">
+                                            <span class="title">{{ details_item.Title }}</span>
+                                            <pre>{{ details_item.Value }}</pre>
+                                        </div>
+                                    {{ end }}
+                                </div>
+                            </div>
+                        </details>
+                    {{ end }}
+                </div>
+            {{ else }}
+                <p class="empty">Ошибок выполнения не зафиксировано.</p>
+            {{ end }}
+        </section>
+
         <section class="section">
             <h2>Все выполненные проверки</h2>
             <table>

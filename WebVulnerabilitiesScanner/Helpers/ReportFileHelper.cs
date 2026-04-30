@@ -26,6 +26,7 @@ namespace WebVulnerabilitiesScanner.Helpers
             var generatedAt = DateTime.Now;
             var reportFileName = $"ScanReport_{generatedAt:yyyyMMdd_HHmmss}.html";
             var reportFilePath = Path.Combine(reportsDirectory, reportFileName);
+            var failedResults = results.FindAll(result => result.IsExecutionFailed);
             var vulnerableResults = results.FindAll(result => result.IsSqlVulnerable);
 
             // Шаблон хранится отдельно от C#-кода, чтобы HTML-отчёт было проще поддерживать и расширять.
@@ -35,7 +36,7 @@ namespace WebVulnerabilitiesScanner.Helpers
                 throw new InvalidOperationException($"Не удалось разобрать шаблон HTML-отчёта: {template.Messages}");
 
             // Сначала собираем безопасную модель данных, затем передаём её в шаблонизатор.
-            var reportModel = BuildReportModel(baseUrl, portalTypeDescription, results, vulnerableResults, generatedAt);
+            var reportModel = BuildReportModel(baseUrl, portalTypeDescription, results, failedResults, vulnerableResults, generatedAt);
             string htmlReport = template.Render(reportModel, member => member.Name);
 
             File.WriteAllText(reportFilePath, htmlReport);
@@ -68,9 +69,12 @@ namespace WebVulnerabilitiesScanner.Helpers
             string baseUrl,
             string portalTypeDescription,
             List<HttpResponseEntity> results,
+            List<HttpResponseEntity> failedResults,
             List<HttpResponseEntity> vulnerableResults,
             DateTime generatedAt)
         {
+            var safeResults = results.FindAll(result => !result.IsSqlVulnerable && !result.IsExecutionFailed);
+
             return new ReportTemplateModel
             {
                 GeneratedAt = HtmlEncode(generatedAt.ToString("dd.MM.yyyy HH:mm:ss")),
@@ -78,7 +82,8 @@ namespace WebVulnerabilitiesScanner.Helpers
                 BaseUrl = HtmlEncode(baseUrl),
                 TotalChecks = results.Count,
                 VulnerableChecks = vulnerableResults.Count,
-                SafeChecks = results.Count - vulnerableResults.Count,
+                FailedChecks = failedResults.Count,
+                SafeChecks = safeResults.Count,
                 VulnerablePercent = GetVulnerablePercent(results.Count, vulnerableResults.Count).ToString("0.##"),
                 Distribution = vulnerableResults
                     .GroupBy(result => result.SqlInjectionType)
@@ -90,6 +95,9 @@ namespace WebVulnerabilitiesScanner.Helpers
                     .ToList(),
                 Vulnerabilities = vulnerableResults
                     .Select((result, index) => BuildVulnerabilityTemplateModel(result, index + 1))
+                    .ToList(),
+                FailedChecksDetails = failedResults
+                    .Select((result, index) => BuildFailedCheckTemplateModel(result, index + 1))
                     .ToList(),
                 Checks = results
                     .Select(BuildCheckTemplateModel)
@@ -137,17 +145,69 @@ namespace WebVulnerabilitiesScanner.Helpers
         /// <returns>Модель строки таблицы</returns>
         private static CheckTemplateModel BuildCheckTemplateModel(HttpResponseEntity result)
         {
-            bool isVulnerable = result.IsSqlVulnerable;
+            string rowClass;
+            string badgeClass;
+            string badgeText;
+
+            if (result.IsExecutionFailed)
+            {
+                rowClass = "failed-row";
+                badgeClass = "badge failed";
+                badgeText = "FAILED";
+            }
+            else if (result.IsSqlVulnerable)
+            {
+                rowClass = "vulnerable-row";
+                badgeClass = "badge vulnerable";
+                badgeText = "VULNERABLE";
+            }
+            else
+            {
+                rowClass = "safe-row";
+                badgeClass = "badge safe";
+                badgeText = "SAFE";
+            }
+
             return new CheckTemplateModel
             {
-                RowClass = isVulnerable ? "vulnerable-row" : "safe-row",
-                BadgeClass = isVulnerable ? "badge vulnerable" : "badge safe",
-                BadgeText = isVulnerable ? "VULNERABLE" : "SAFE",
+                RowClass = rowClass,
+                BadgeClass = badgeClass,
+                BadgeText = badgeText,
                 RequestType = HtmlEncode(result.RequestType),
                 Endpoint = HtmlEncode(result.Endpoint),
                 SqlInjectionType = HtmlEncode(result.SqlInjectionType.ToString()),
-                StatusCode = HtmlEncode(result.StatusCode.ToString()),
+                StatusCode = HtmlEncode(result.IsExecutionFailed ? "N/A" : result.StatusCode.ToString()),
                 Payload = HtmlEncode(result.Payload)
+            };
+        }
+
+        /// <summary>
+        /// Преобразование результата с ошибкой выполнения в модель для отдельного блока отчёта.
+        /// </summary>
+        /// <param name="result">Результат проверки, завершившейся ошибкой</param>
+        /// <param name="index">Порядковый номер результата в блоке ошибок</param>
+        /// <returns>Модель ошибочной проверки для шаблона</returns>
+        private static FailedCheckTemplateModel BuildFailedCheckTemplateModel(HttpResponseEntity result, int index)
+        {
+            var details = new List<DetailsItemTemplateModel>
+            {
+                CreateDetailsItem("Полный адрес", result.UrlWithEndpoint),
+                CreateDetailsItem("Payload", result.Payload),
+                CreateDetailsItem("Тип запроса", result.RequestType),
+                CreateDetailsItem("Тип SQL-инъекции", result.SqlInjectionType.ToString()),
+                CreateDetailsItem("Ошибка выполнения", result.SqlInjectionSign)
+            };
+
+            if (result.RequestType == "POST" && !string.IsNullOrWhiteSpace(result.JsonBodyParams))
+                details.Add(CreateDetailsItem("Тело запроса", result.JsonBodyParams));
+
+            return new FailedCheckTemplateModel
+            {
+                Index = index,
+                SqlInjectionType = HtmlEncode(result.SqlInjectionType.ToString()),
+                RequestType = HtmlEncode(result.RequestType),
+                Endpoint = HtmlEncode(result.Endpoint),
+                Details = details
             };
         }
 
@@ -200,10 +260,12 @@ namespace WebVulnerabilitiesScanner.Helpers
             public string BaseUrl { get; set; } = string.Empty;
             public int TotalChecks { get; set; }
             public int VulnerableChecks { get; set; }
+            public int FailedChecks { get; set; }
             public int SafeChecks { get; set; }
             public string VulnerablePercent { get; set; } = string.Empty;
             public List<DistributionItemTemplateModel> Distribution { get; set; } = new();
             public List<VulnerabilityTemplateModel> Vulnerabilities { get; set; } = new();
+            public List<FailedCheckTemplateModel> FailedChecksDetails { get; set; } = new();
             public List<CheckTemplateModel> Checks { get; set; } = new();
         }
 
@@ -225,6 +287,37 @@ namespace WebVulnerabilitiesScanner.Helpers
             public string SqlInjectionType { get; set; } = string.Empty;
             public string RequestType { get; set; } = string.Empty;
             public string Endpoint { get; set; } = string.Empty;
+            public List<DetailsItemTemplateModel> Details { get; set; } = new();
+        }
+
+        /// <summary>
+        /// Модель одной проверки, которая не была выполнена из-за ошибки, для блока детализации отчёта.
+        /// </summary>
+        private sealed class FailedCheckTemplateModel
+        {
+            /// <summary>
+            /// Порядковый номер записи в блоке ошибок.
+            /// </summary>
+            public int Index { get; set; }
+
+            /// <summary>
+            /// Тип SQL-инъекции, для которого выполнялась проверка.
+            /// </summary>
+            public string SqlInjectionType { get; set; } = string.Empty;
+
+            /// <summary>
+            /// Тип HTTP-запроса.
+            /// </summary>
+            public string RequestType { get; set; } = string.Empty;
+
+            /// <summary>
+            /// Эндпоинт, на котором произошла ошибка.
+            /// </summary>
+            public string Endpoint { get; set; } = string.Empty;
+
+            /// <summary>
+            /// Детализация ошибки для отображения в отчёте.
+            /// </summary>
             public List<DetailsItemTemplateModel> Details { get; set; } = new();
         }
 
