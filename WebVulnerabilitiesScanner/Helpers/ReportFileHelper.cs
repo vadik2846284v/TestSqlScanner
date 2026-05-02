@@ -18,7 +18,11 @@ namespace WebVulnerabilitiesScanner.Helpers
         /// <param name="portalTypeDescription">Описание типа портала</param>
         /// <param name="results">Результаты сканирования</param>
         /// <returns>Полный путь к сохранённому файлу отчёта</returns>
-        public static string SaveScanReport(string baseUrl, string portalTypeDescription, List<HttpResponseEntity> results)
+        public static string SaveScanReport(
+            string baseUrl,
+            string portalTypeDescription,
+            List<HttpResponseEntity> results,
+            AiScanAnalysisResult? aiAnalysisResult = null)
         {
             var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Reports");
             Directory.CreateDirectory(reportsDirectory);
@@ -36,7 +40,14 @@ namespace WebVulnerabilitiesScanner.Helpers
                 throw new InvalidOperationException($"Не удалось разобрать шаблон HTML-отчёта: {template.Messages}");
 
             // Сначала собираем безопасную модель данных, затем передаём её в шаблонизатор.
-            var reportModel = BuildReportModel(baseUrl, portalTypeDescription, results, failedResults, vulnerableResults, generatedAt);
+            var reportModel = BuildReportModel(
+                baseUrl,
+                portalTypeDescription,
+                results,
+                failedResults,
+                vulnerableResults,
+                generatedAt,
+                aiAnalysisResult);
             string htmlReport = template.Render(reportModel, member => member.Name);
 
             File.WriteAllText(reportFilePath, htmlReport);
@@ -71,7 +82,8 @@ namespace WebVulnerabilitiesScanner.Helpers
             List<HttpResponseEntity> results,
             List<HttpResponseEntity> failedResults,
             List<HttpResponseEntity> vulnerableResults,
-            DateTime generatedAt)
+            DateTime generatedAt,
+            AiScanAnalysisResult? aiAnalysisResult)
         {
             var safeResults = results.FindAll(result => !result.IsSqlVulnerable && !result.IsExecutionFailed);
 
@@ -99,6 +111,9 @@ namespace WebVulnerabilitiesScanner.Helpers
                 FailedChecksDetails = failedResults
                     .Select((result, index) => BuildFailedCheckTemplateModel(result, index + 1))
                     .ToList(),
+                HasAiAnalysis = aiAnalysisResult is not null && aiAnalysisResult.ShouldIncludeInReport,
+                AiAnalysisSummary = HtmlEncode(aiAnalysisResult?.Summary),
+                AiAnalysisStatus = HtmlEncode(aiAnalysisResult?.StatusMessage),
                 Checks = results
                     .Select(BuildCheckTemplateModel)
                     .ToList()
@@ -263,6 +278,9 @@ namespace WebVulnerabilitiesScanner.Helpers
             public int FailedChecks { get; set; }
             public int SafeChecks { get; set; }
             public string VulnerablePercent { get; set; } = string.Empty;
+            public bool HasAiAnalysis { get; set; }
+            public string AiAnalysisSummary { get; set; } = string.Empty;
+            public string AiAnalysisStatus { get; set; } = string.Empty;
             public List<DistributionItemTemplateModel> Distribution { get; set; } = new();
             public List<VulnerabilityTemplateModel> Vulnerabilities { get; set; } = new();
             public List<FailedCheckTemplateModel> FailedChecksDetails { get; set; } = new();

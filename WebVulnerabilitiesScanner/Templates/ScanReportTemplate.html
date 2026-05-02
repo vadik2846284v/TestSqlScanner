@@ -314,6 +314,19 @@
             </div>
         </section>
 
+        {{ if HasAiAnalysis }}
+        <section class="section">
+            <h2>AI-анализ</h2>
+            {{ if AiAnalysisSummary != "" }}
+                <div class="details-item">
+                    <pre>{{ AiAnalysisSummary }}</pre>
+                </div>
+            {{ else }}
+                <p class="empty">{{ AiAnalysisStatus }}</p>
+            {{ end }}
+        </section>
+        {{ end }}
+
         <section class="section">
             <h2>Детализация найденных потенциальных SQL-инъекций</h2>
             {{ if Vulnerabilities.size > 0 }}

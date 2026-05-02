@@ -4,3 +4,7 @@
 WebVulnerabilitiesScanner/obj/
 WebVulnerabilitiesScanner/bin/Debug/
 .vs/WebVulnerabilitiesScanner/DesignTimeBuild/
+WebVulnerabilitiesScanner/SampleScanConfigs/gigachat-config.json
+.vs/ProjectEvaluation/webvulnerabilitiesscanner.metadata.v10.bin
+.vs/ProjectEvaluation/webvulnerabilitiesscanner.projects.v10.bin
+.vs/ProjectEvaluation/webvulnerabilitiesscanner.strings.v10.bin

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using WebVulnerabilitiesScanner.Entities;
 using WebVulnerabilitiesScanner.Helpers;
+using WebVulnerabilitiesScanner.Helpers.JsonConfiguration;
 
 namespace WebVulnerabilitiesScanner
 {
@@ -10,19 +11,13 @@ namespace WebVulnerabilitiesScanner
         {
             try
             {
-                Console.Write("Введите путь к JSON-файлу с эндпоинтами: ");
-                string? jsonFilePath = Console.ReadLine();
+                Console.Write("Введите путь к JSON-файлу с эндпоинтами портала для их проверки: ");
+                string? scanConfigurationPath = Console.ReadLine();
                 Console.WriteLine();
 
-                var jsonFileLoader = new JsonScanInputConfigurationLoader(jsonFilePath);
-                while (!jsonFileLoader.IsFileExists)
-                {
-                    Console.WriteLine("Указанный файл не найден. Пожалуйста, введите корректный путь к JSON-файлу:");
-                    jsonFilePath = Console.ReadLine();
-                    jsonFileLoader = new JsonScanInputConfigurationLoader(jsonFilePath);
-                }
-                var loadedJsonConfiguration = jsonFileLoader.Load();
-                RunScanFromJsonConfiguration(loadedJsonConfiguration);
+                ScanInputConfiguration scanConfiguration = LoadScanConfiguration(scanConfigurationPath);
+                GigaChatConfiguration? gigaChatConfiguration = TryLoadGigaChatConfiguration();
+                RunScanFromJsonConfiguration(scanConfiguration, gigaChatConfiguration);
             }
             catch (Exception ex)
             {
@@ -31,19 +26,73 @@ namespace WebVulnerabilitiesScanner
         }
 
         /// <summary>
-        /// Запуск сканирования по конфигурации, загруженной из JSON-файла.
+        /// Загружает конфигурацию сканирования из JSON-файла.
         /// </summary>
-        /// <param name="jsonConfiguration">Конфигурация сканирования</param>
-        private static void RunScanFromJsonConfiguration(ScanInputConfiguration jsonConfiguration)
+        /// <param name="scanConfigurationPath">Путь к JSON-файлу конфигурации сканирования.</param>
+        /// <returns>Загруженная конфигурация сканирования.</returns>
+        private static ScanInputConfiguration LoadScanConfiguration(string? scanConfigurationPath)
         {
-            string baseUrl = ResolveBaseUrl(jsonConfiguration.BaseUrl);
-            string configurationName = string.IsNullOrWhiteSpace(jsonConfiguration.Name)
+            var jsonFileLoader = new JsonScanInputConfigurationLoader(scanConfigurationPath);
+            while (!jsonFileLoader.IsFileExists)
+            {
+                Console.WriteLine("Указанный файл не найден. Пожалуйста, введите корректный путь к JSON-файлу:");
+                scanConfigurationPath = Console.ReadLine();
+                jsonFileLoader = new JsonScanInputConfigurationLoader(scanConfigurationPath);
+            }
+
+            return jsonFileLoader.Load();
+        }
+
+        /// <summary>
+        /// Загружает отдельную конфигурацию GigaChat либо пропускает AI-анализ.
+        /// </summary>
+        /// <returns>Конфигурация GigaChat или null, если AI-анализ отключён.</returns>
+        private static GigaChatConfiguration? TryLoadGigaChatConfiguration()
+        {
+            Console.Write("Введите путь к JSON-файлу с настройками GigaChat (Enter чтобы пропустить AI-анализ): ");
+            string? gigaChatConfigurationPath = Console.ReadLine();
+            Console.WriteLine();
+
+            if (string.IsNullOrWhiteSpace(gigaChatConfigurationPath))
+                return null;
+
+            var jsonFileLoader = new JsonGigaChatConfigurationLoader(gigaChatConfigurationPath);
+            while (!jsonFileLoader.IsFileExists)
+            {
+                Console.WriteLine("Файл конфигурации GigaChat не найден. Введите корректный путь или нажмите Enter для пропуска:");
+                gigaChatConfigurationPath = Console.ReadLine();
+
+                if (string.IsNullOrWhiteSpace(gigaChatConfigurationPath))
+                    return null;
+
+                jsonFileLoader = new JsonGigaChatConfigurationLoader(gigaChatConfigurationPath);
+            }
+
+            return jsonFileLoader.Load();
+        }
+
+        /// <summary>
+        /// Запускает сканирование по конфигурации, загруженной из JSON-файла.
+        /// </summary>
+        /// <param name="scanConfiguration">Конфигурация сканирования.</param>
+        /// <param name="gigaChatConfiguration">Отдельная конфигурация GigaChat.</param>
+        private static void RunScanFromJsonConfiguration(
+            ScanInputConfiguration scanConfiguration,
+            GigaChatConfiguration? gigaChatConfiguration)
+        {
+            string baseUrl = ResolveBaseUrl(scanConfiguration.BaseUrl);
+            string configurationName = string.IsNullOrWhiteSpace(scanConfiguration.Name)
                 ? "JSON configuration"
-                : jsonConfiguration.Name;
+                : scanConfiguration.Name;
 
             var scanner = new SqlInjectionScanner(baseUrl);
-            var results = scanner.ScanForSqlInjection(jsonConfiguration.GetRequestEndpoints, jsonConfiguration.PostRequestsInfo);
-            string reportFilePath = ReportFileHelper.SaveScanReport(baseUrl, configurationName, results);
+            var results = scanner.ScanForSqlInjection(scanConfiguration.GetRequestEndpoints, scanConfiguration.PostRequestsInfo);
+            AiScanAnalysisResult aiAnalysisResult = AnalyzeScanResultsWithAi(
+                baseUrl,
+                configurationName,
+                results,
+                gigaChatConfiguration);
+            string reportFilePath = ReportFileHelper.SaveScanReport(baseUrl, configurationName, results, aiAnalysisResult);
 
             Console.WriteLine($"Результаты сканирования сохранены в файл: {reportFilePath}");
             OpenReportInBrowser(reportFilePath);
@@ -51,10 +100,10 @@ namespace WebVulnerabilitiesScanner
         }
 
         /// <summary>
-        /// Получение базового URL либо из конфигурации, либо через консольный ввод.
+        /// Получает базовый URL либо из конфигурации, либо через консольный ввод.
         /// </summary>
-        /// <param name="configuredBaseUrl">URL из JSON-конфигурации</param>
-        /// <returns>Нормализованный базовый URL</returns>
+        /// <param name="configuredBaseUrl">URL из JSON-конфигурации.</param>
+        /// <returns>Нормализованный базовый URL.</returns>
         private static string ResolveBaseUrl(string? configuredBaseUrl)
         {
             if (!string.IsNullOrWhiteSpace(configuredBaseUrl))
@@ -70,9 +119,33 @@ namespace WebVulnerabilitiesScanner
         }
 
         /// <summary>
-        /// Открытие сохранённого HTML-отчёта в браузере по умолчанию.
+        /// Выполняет дополнительный AI-анализ результатов сканирования через GigaChat.
         /// </summary>
-        /// <param name="reportFilePath">Полный путь к файлу отчёта</param>
+        /// <param name="baseUrl">Базовый адрес сканируемого портала.</param>
+        /// <param name="configurationName">Название конфигурации сканирования.</param>
+        /// <param name="results">Результаты сканирования.</param>
+        /// <param name="gigaChatConfiguration">Отдельная конфигурация GigaChat.</param>
+        /// <returns>Результат выполнения AI-анализа.</returns>
+        private static AiScanAnalysisResult AnalyzeScanResultsWithAi(
+            string baseUrl,
+            string configurationName,
+            List<HttpResponseEntity> results,
+            GigaChatConfiguration? gigaChatConfiguration)
+        {
+            var aiAnalysisService = new GigaChatScanAnalysisService(gigaChatConfiguration);
+            AiScanAnalysisResult analysisResult = aiAnalysisService
+                .AnalyzeResultsAsync(baseUrl, configurationName, results)
+                .GetAwaiter()
+                .GetResult();
+
+            Console.WriteLine(analysisResult.StatusMessage);
+            return analysisResult;
+        }
+
+        /// <summary>
+        /// Открывает сохранённый HTML-отчёт в браузере по умолчанию.
+        /// </summary>
+        /// <param name="reportFilePath">Полный путь к файлу отчёта.</param>
         static void OpenReportInBrowser(string reportFilePath)
         {
             try
