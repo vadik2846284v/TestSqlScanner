@@ -106,7 +106,7 @@ public class SqlInjectionScanner
         int checksPerEndpoint = singleCheckPayloads.Count
             + SqlInjectionTestData.TimeBasedBlindPayloadsInfo.Count
             + SqlInjectionTestData.BooleanBasedPayloadPairs.Count;
-        int totalChecks = CalculateTotalChecks(getRequestsEndpoints.Count, postRequestsInfo.Count, checksPerEndpoint);
+        int totalChecks = CalculateTotalChecks(getRequestsEndpoints.Count, postRequestsInfo, checksPerEndpoint);
         int currentCheck = 0;
 
         if (totalChecks == 0)
@@ -146,28 +146,33 @@ public class SqlInjectionScanner
 
         foreach (var endpointInfo in postRequestsInfo) 
         {
-            foreach (var payloadInfo in singleCheckPayloads)
+            foreach (var bodyFieldName in GetPostBodyFieldNames(endpointInfo))
             {
-                ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "POST", endpointInfo.Endpoint, payloadInfo.Payload);
-                var result = TestPostRequest(endpointInfo, payloadInfo);
-                results.Add(result.GetAwaiter().GetResult());
-            }
+                foreach (var payloadInfo in singleCheckPayloads)
+                {
+                    string payloadDescription = BuildPostPayloadDescription(bodyFieldName, payloadInfo.Payload);
+                    ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "POST", endpointInfo.Endpoint, payloadDescription);
+                    var result = TestPostRequest(endpointInfo, bodyFieldName, payloadInfo);
+                    results.Add(result.GetAwaiter().GetResult());
+                }
 
-            foreach (var payloadInfo in SqlInjectionTestData.TimeBasedBlindPayloadsInfo)
-            {
-                // Для time-based проверки отправляем несколько одинаковых запросов и считаем среднее время ответа.
-                ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "POST", endpointInfo.Endpoint, payloadInfo.Payload);
-                var result = TestTimeBasedPostRequest(endpointInfo, payloadInfo);
-                results.Add(result.GetAwaiter().GetResult());
-            }
+                foreach (var payloadInfo in SqlInjectionTestData.TimeBasedBlindPayloadsInfo)
+                {
+                    // Для time-based проверки отправляем несколько одинаковых запросов и считаем среднее время ответа.
+                    string payloadDescription = BuildPostPayloadDescription(bodyFieldName, payloadInfo.Payload);
+                    ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "POST", endpointInfo.Endpoint, payloadDescription);
+                    var result = TestTimeBasedPostRequest(endpointInfo, bodyFieldName, payloadInfo);
+                    results.Add(result.GetAwaiter().GetResult());
+                }
 
-            foreach (var booleanPayloadPair in SqlInjectionTestData.BooleanBasedPayloadPairs)
-            {
-                // Для слепой boolean-based проверки отправляем обе ветки: true и false.
-                string payloadDescription = BuildBooleanPayloadDescription(booleanPayloadPair);
-                ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "POST", endpointInfo.Endpoint, payloadDescription);
-                var result = TestBooleanBasedPostRequest(endpointInfo, booleanPayloadPair);
-                results.Add(result.GetAwaiter().GetResult());
+                foreach (var booleanPayloadPair in SqlInjectionTestData.BooleanBasedPayloadPairs)
+                {
+                    // Для слепой boolean-based проверки отправляем обе ветки: true и false.
+                    string payloadDescription = BuildPostPayloadDescription(bodyFieldName, BuildBooleanPayloadDescription(booleanPayloadPair));
+                    ConsoleHelper.WriteScanProgress(++currentCheck, totalChecks, "POST", endpointInfo.Endpoint, payloadDescription);
+                    var result = TestBooleanBasedPostRequest(endpointInfo, bodyFieldName, booleanPayloadPair);
+                    results.Add(result.GetAwaiter().GetResult());
+                }
             }
         }
 
@@ -178,12 +183,17 @@ public class SqlInjectionScanner
     /// Вычисляет общее количество логических проверок для всех GET- и POST-эндпоинтов.
     /// </summary>
     /// <param name="getEndpointsCount">Количество GET-эндпоинтов.</param>
-    /// <param name="postEndpointsCount">Количество POST-эндпоинтов.</param>
-    /// <param name="checksPerEndpoint">Количество проверок, выполняемых для одного эндпоинта.</param>
+    /// <param name="postRequestsInfo">POST-эндпоинты с параметрами body.</param>
+    /// <param name="checksPerEndpoint">Количество проверок, выполняемых для одного GET-эндпоинта или одного поля POST-body.</param>
     /// <returns>Общее количество проверок для всего сканирования.</returns>
-    private static int CalculateTotalChecks(int getEndpointsCount, int postEndpointsCount, int checksPerEndpoint)
+    private static int CalculateTotalChecks(
+        int getEndpointsCount,
+        IEnumerable<PostRequestParams> postRequestsInfo,
+        int checksPerEndpoint)
     {
-        return (getEndpointsCount + postEndpointsCount) * checksPerEndpoint;
+        int getChecksCount = getEndpointsCount * checksPerEndpoint;
+        int postChecksCount = postRequestsInfo.Sum(postRequestInfo => GetPostBodyFieldNames(postRequestInfo).Count * checksPerEndpoint);
+        return getChecksCount + postChecksCount;
     }
 
     /// <summary>
@@ -207,6 +217,27 @@ public class SqlInjectionScanner
     private static string BuildBooleanPayloadDescription(BooleanBasedPayloadPairEntity payloadPair)
     {
         return $"TRUE: {payloadPair.TruePayloadInfo.Payload}; FALSE: {payloadPair.FalsePayloadInfo.Payload}";
+    }
+
+    /// <summary>
+    /// Возвращает имена полей тела POST-запроса, которые нужно проверять по одному.
+    /// </summary>
+    /// <param name="postRequestInfo">Информация о POST-запросе.</param>
+    /// <returns>Список имён полей для последовательного тестирования.</returns>
+    private static List<string> GetPostBodyFieldNames(PostRequestParams postRequestInfo)
+    {
+        return postRequestInfo.BodyParams.Keys.ToList();
+    }
+
+    /// <summary>
+    /// Формирует строковое описание payload'а для POST-проверки конкретного поля body.
+    /// </summary>
+    /// <param name="bodyFieldName">Имя тестируемого поля.</param>
+    /// <param name="payloadDescription">Описание payload'а.</param>
+    /// <returns>Строка для прогресса и отчёта.</returns>
+    private static string BuildPostPayloadDescription(string bodyFieldName, string payloadDescription)
+    {
+        return $"field '{bodyFieldName}' | {payloadDescription}";
     }
 
     #region GET Methods tests
@@ -322,18 +353,24 @@ public class SqlInjectionScanner
     /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
     /// <param name="payloadInfo">Полезная нагрузка</param>
     /// <returns></returns>
-    private async Task<HttpResponseEntity> TestPostRequest(PostRequestParams postRequestInfo, RequestSqlInjectionPayloadEntity payloadInfo) 
+    private async Task<HttpResponseEntity> TestPostRequest(
+        PostRequestParams postRequestInfo,
+        string bodyFieldName,
+        RequestSqlInjectionPayloadEntity payloadInfo) 
     {
+        string payloadDescription = BuildPostPayloadDescription(bodyFieldName, payloadInfo.Payload);
+        string jsonBodyParams = BuildPostJsonBody(postRequestInfo, bodyFieldName, payloadInfo.Payload);
+
         try 
         {
-            var responseInfo = await ExecutePostRequest(postRequestInfo, payloadInfo.Payload);
+            var responseInfo = await ExecutePostRequest(postRequestInfo, bodyFieldName, payloadInfo.Payload);
             bool isSqlInjection = IsSqlInjectionExists(responseInfo.Content, responseInfo.StatusCode, responseInfo.ElapsedMilliseconds, out string sqlInjectionSign);
 
             return new HttpResponseEntity
             {
                 BaseUrl = _baseUrl,
                 Endpoint = postRequestInfo.Endpoint,
-                Payload = payloadInfo.Payload,
+                Payload = payloadDescription,
                 RequestType = "POST",
                 JsonBodyParams = responseInfo.JsonBodyParams,
                 SqlInjectionType = payloadInfo.SqlInjectionType,
@@ -346,7 +383,13 @@ public class SqlInjectionScanner
         } 
         catch (Exception ex)
         {
-            return CreateFailedResponseEntity(postRequestInfo.Endpoint, "POST", payloadInfo.Payload, payloadInfo.SqlInjectionType, ex);
+            return CreateFailedResponseEntity(
+                postRequestInfo.Endpoint,
+                "POST",
+                payloadDescription,
+                payloadInfo.SqlInjectionType,
+                ex,
+                jsonBodyParams);
         }
     }
 
@@ -356,18 +399,28 @@ public class SqlInjectionScanner
     /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
     /// <param name="payloadInfo">Информация о полезной нагрузке</param>
     /// <returns></returns>
-    private async Task<HttpResponseEntity> TestTimeBasedPostRequest(PostRequestParams postRequestInfo, RequestSqlInjectionPayloadEntity payloadInfo)
+    private async Task<HttpResponseEntity> TestTimeBasedPostRequest(
+        PostRequestParams postRequestInfo,
+        string bodyFieldName,
+        RequestSqlInjectionPayloadEntity payloadInfo)
     {
+        string payloadDescription = BuildPostPayloadDescription(bodyFieldName, payloadInfo.Payload);
+        string jsonBodyParams = BuildPostJsonBody(postRequestInfo, bodyFieldName, payloadInfo.Payload);
+
         try
         {
-            var responseInfo = await ExecutePostRequestWithAverageTiming(postRequestInfo, payloadInfo.Payload, SqlInjectionTestData.TimeBasedBlindRequestsCountForAverage);
+            var responseInfo = await ExecutePostRequestWithAverageTiming(
+                postRequestInfo,
+                bodyFieldName,
+                payloadInfo.Payload,
+                SqlInjectionTestData.TimeBasedBlindRequestsCountForAverage);
             bool isSqlInjection = IsTimeBasedSqlInjectionExists(responseInfo.ElapsedMilliseconds, responseInfo.MeasurementsCount, out string sqlInjectionSign);
 
             return new HttpResponseEntity
             {
                 BaseUrl = _baseUrl,
                 Endpoint = postRequestInfo.Endpoint,
-                Payload = payloadInfo.Payload,
+                Payload = payloadDescription,
                 RequestType = "POST",
                 JsonBodyParams = responseInfo.JsonBodyParams,
                 SqlInjectionType = payloadInfo.SqlInjectionType,
@@ -380,7 +433,13 @@ public class SqlInjectionScanner
         }
         catch (Exception ex)
         {
-            return CreateFailedResponseEntity(postRequestInfo.Endpoint, "POST", payloadInfo.Payload, payloadInfo.SqlInjectionType, ex);
+            return CreateFailedResponseEntity(
+                postRequestInfo.Endpoint,
+                "POST",
+                payloadDescription,
+                payloadInfo.SqlInjectionType,
+                ex,
+                jsonBodyParams);
         }
     }
 
@@ -390,13 +449,21 @@ public class SqlInjectionScanner
     /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
     /// <param name="payloadPair">Пара boolean-based нагрузок</param>
     /// <returns></returns>
-    private async Task<HttpResponseEntity> TestBooleanBasedPostRequest(PostRequestParams postRequestInfo, BooleanBasedPayloadPairEntity payloadPair)
+    private async Task<HttpResponseEntity> TestBooleanBasedPostRequest(
+        PostRequestParams postRequestInfo,
+        string bodyFieldName,
+        BooleanBasedPayloadPairEntity payloadPair)
     {
+        string booleanPayloadDescription = BuildBooleanPayloadDescription(payloadPair);
+        string payloadDescription = BuildPostPayloadDescription(bodyFieldName, booleanPayloadDescription);
+        string truePayloadJsonBody = BuildPostJsonBody(postRequestInfo, bodyFieldName, payloadPair.TruePayloadInfo.Payload);
+        string falsePayloadJsonBody = BuildPostJsonBody(postRequestInfo, bodyFieldName, payloadPair.FalsePayloadInfo.Payload);
+
         try
         {
             // Уязвимость подтверждается только если приложение по-разному отвечает на истинное и ложное условие.
-            var trueResponseInfo = await ExecutePostRequest(postRequestInfo, payloadPair.TruePayloadInfo.Payload);
-            var falseResponseInfo = await ExecutePostRequest(postRequestInfo, payloadPair.FalsePayloadInfo.Payload);
+            var trueResponseInfo = await ExecutePostRequest(postRequestInfo, bodyFieldName, payloadPair.TruePayloadInfo.Payload);
+            var falseResponseInfo = await ExecutePostRequest(postRequestInfo, bodyFieldName, payloadPair.FalsePayloadInfo.Payload);
             bool isSqlInjection = IsBooleanBasedSqlInjectionExists(trueResponseInfo.Content, trueResponseInfo.StatusCode,
                 falseResponseInfo.Content, falseResponseInfo.StatusCode, out string sqlInjectionSign);
 
@@ -404,7 +471,7 @@ public class SqlInjectionScanner
             {
                 BaseUrl = _baseUrl,
                 Endpoint = postRequestInfo.Endpoint,
-                Payload = $"TRUE: {payloadPair.TruePayloadInfo.Payload}; FALSE: {payloadPair.FalsePayloadInfo.Payload}",
+                Payload = payloadDescription,
                 RequestType = "POST",
                 JsonBodyParams = $"TRUE payload body: {trueResponseInfo.JsonBodyParams}{Environment.NewLine}FALSE payload body: {falseResponseInfo.JsonBodyParams}",
                 SqlInjectionType = SqlInjectionType.BooleanBased,
@@ -417,8 +484,15 @@ public class SqlInjectionScanner
         }
         catch (Exception ex)
         {
-            string payloadDescription = $"TRUE: {payloadPair.TruePayloadInfo.Payload}; FALSE: {payloadPair.FalsePayloadInfo.Payload}";
-            return CreateFailedResponseEntity(postRequestInfo.Endpoint, "POST", payloadDescription, SqlInjectionType.BooleanBased, ex);
+            string failedJsonBodyParams =
+                $"TRUE payload body: {truePayloadJsonBody}{Environment.NewLine}FALSE payload body: {falsePayloadJsonBody}";
+            return CreateFailedResponseEntity(
+                postRequestInfo.Endpoint,
+                "POST",
+                payloadDescription,
+                SqlInjectionType.BooleanBased,
+                ex,
+                failedJsonBodyParams);
         }
     }
     #endregion
@@ -431,13 +505,15 @@ public class SqlInjectionScanner
     /// <param name="payload">Payload, использованный в проверке</param>
     /// <param name="sqlInjectionType">Тип проверяемой SQL-инъекции</param>
     /// <param name="exception">Исключение, возникшее при выполнении проверки</param>
+    /// <param name="jsonBodyParams">Тело POST-запроса, если оно было подготовлено.</param>
     /// <returns>Сущность результата с признаком ошибки выполнения</returns>
     private HttpResponseEntity CreateFailedResponseEntity(
         string endpoint,
         string requestType,
         string payload,
         SqlInjectionType sqlInjectionType,
-        Exception exception)
+        Exception exception,
+        string jsonBodyParams = "")
     {
         LogScanError(requestType, endpoint, payload, exception);
 
@@ -447,7 +523,7 @@ public class SqlInjectionScanner
             Endpoint = endpoint,
             Payload = payload,
             RequestType = requestType,
-            JsonBodyParams = string.Empty,
+            JsonBodyParams = jsonBodyParams,
             SqlInjectionType = sqlInjectionType,
             FixRecommendation = GetRecommendationForSqlInjection(sqlInjectionType),
             StatusCode = 0,
@@ -519,31 +595,39 @@ public class SqlInjectionScanner
     }
 
     /// <summary>
-    /// Выполнение POST-запроса с тестовой нагрузкой.
+    /// Формирует JSON-тело POST-запроса с подстановкой payload только в одно указанное поле.
     /// </summary>
-    /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
-    /// <param name="payload">Полезная нагрузка</param>
-    /// <returns></returns>
-    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds, string JsonBodyParams, int MeasurementsCount)> ExecutePostRequest(
-        PostRequestParams postRequestInfo, string payload)
+    /// <param name="postRequestInfo">Информация о POST-запросе.</param>
+    /// <param name="bodyFieldName">Поле body, в которое подставляется payload.</param>
+    /// <param name="payload">Тестовая нагрузка.</param>
+    /// <returns>Сериализованное JSON-тело запроса.</returns>
+    private static string BuildPostJsonBody(PostRequestParams postRequestInfo, string bodyFieldName, string payload)
     {
-        string testUrl = _baseUrl + postRequestInfo.Endpoint;
-
         var jsonPayload = new Dictionary<string, object>();
         foreach (var dataItem in postRequestInfo.BodyParams)
         {
             jsonPayload[dataItem.Key] = dataItem.Value;
         }
 
-        foreach (var injectionField in postRequestInfo.BodyParams)
-        {
-            if (jsonPayload.ContainsKey(injectionField.Key))
-            {
-                jsonPayload[injectionField.Key] = payload;
-            }
-        }
+        if (!jsonPayload.ContainsKey(bodyFieldName))
+            throw new InvalidOperationException($"Поле '{bodyFieldName}' отсутствует в body для POST endpoint '{postRequestInfo.Endpoint}'.");
 
-        string jsonContent = JsonSerializer.Serialize(jsonPayload);
+        jsonPayload[bodyFieldName] = payload;
+        return JsonSerializer.Serialize(jsonPayload);
+    }
+
+    /// <summary>
+    /// Выполнение POST-запроса с тестовой нагрузкой.
+    /// </summary>
+    /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
+    /// <param name="bodyFieldName">Имя поля body, в которое подставляется payload.</param>
+    /// <param name="payload">Полезная нагрузка</param>
+    /// <returns></returns>
+    private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds, string JsonBodyParams, int MeasurementsCount)> ExecutePostRequest(
+        PostRequestParams postRequestInfo, string bodyFieldName, string payload)
+    {
+        string testUrl = _baseUrl + postRequestInfo.Endpoint;
+        string jsonContent = BuildPostJsonBody(postRequestInfo, bodyFieldName, payload);
         var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
         var stopwatch = Stopwatch.StartNew();
@@ -558,11 +642,12 @@ public class SqlInjectionScanner
     /// Выполнение POST-запроса несколько раз для расчёта среднего времени ответа.
     /// </summary>
     /// <param name="postRequestInfo">Инфомация для POST-запроса</param>
+    /// <param name="bodyFieldName">Имя поля body, в которое подставляется payload.</param>
     /// <param name="payload">Полезная нагрузка</param>
     /// <param name="measurementsCount">Количество замеров</param>
     /// <returns></returns>
     private async Task<(string Content, HttpStatusCode StatusCode, long ElapsedMilliseconds, string JsonBodyParams, int MeasurementsCount)> ExecutePostRequestWithAverageTiming(
-        PostRequestParams postRequestInfo, string payload, int measurementsCount)
+        PostRequestParams postRequestInfo, string bodyFieldName, string payload, int measurementsCount)
     {
         long totalElapsedMilliseconds = 0;
         string content = string.Empty;
@@ -572,7 +657,7 @@ public class SqlInjectionScanner
         // Для time-based проверки усредняем несколько одинаковых запросов, чтобы снизить влияние сетевых задержек.
         for (int measurementIndex = 0; measurementIndex < measurementsCount; measurementIndex++)
         {
-            var responseInfo = await ExecutePostRequest(postRequestInfo, payload);
+            var responseInfo = await ExecutePostRequest(postRequestInfo, bodyFieldName, payload);
             totalElapsedMilliseconds += responseInfo.ElapsedMilliseconds;
             content = responseInfo.Content;
             jsonBodyParams = responseInfo.JsonBodyParams;
