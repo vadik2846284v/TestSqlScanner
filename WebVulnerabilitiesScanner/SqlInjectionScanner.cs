@@ -14,7 +14,7 @@ public class SqlInjectionScanner
     /// <summary>
     /// Минимальный таймаут HTTP-клиента в секундах для обычных запросов.
     /// </summary>
-    private const int DefaultHttpClientTimeoutSeconds = 10;
+    private const int DefaultHttpClientTimeoutSeconds = 30;
 
     /// <summary>
     /// Дополнительный запас времени в секундах для time-based payload'ов.
