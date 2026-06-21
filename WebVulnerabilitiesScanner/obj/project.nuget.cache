@@ -1,10 +1,23 @@
 {
   "version": 2,
-  "dgSpecHash": "Z3qfoO3XZiI=",
+  "dgSpecHash": "3Xq3VBcXbAg=",
   "success": true,
   "projectFilePath": "C:\\Users\\bychkov\\Documents\\TestSqlScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\bychkov\\.nuget\\packages\\scriban\\7.1.0\\scriban.7.1.0.nupkg.sha512"
   ],
-  "logs": []
+  "logs": [
+    {
+      "code": "NU1903",
+      "level": "Warning",
+      "message": "У пакета \"Scriban\" 7.1.0 есть известная уязвимость https://github.com/advisories/GHSA-24c8-4792-22hx (уровень серьезности: высокий уровень)",
+      "projectPath": "C:\\Users\\bychkov\\Documents\\TestSqlScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj",
+      "warningLevel": 1,
+      "filePath": "C:\\Users\\bychkov\\Documents\\TestSqlScanner\\WebVulnerabilitiesScanner\\WebVulnerabilitiesScanner.csproj",
+      "libraryId": "Scriban",
+      "targetGraphs": [
+        "net8.0"
+      ]
+    }
+  ]
 }

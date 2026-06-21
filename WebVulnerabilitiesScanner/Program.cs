@@ -44,12 +44,12 @@ namespace WebVulnerabilitiesScanner
         }
 
         /// <summary>
-        /// Загружает отдельную конфигурацию GigaChat либо пропускает AI-анализ.
+        /// Загружает отдельную конфигурацию GigaChat либо пропускает ИИ-анализ.
         /// </summary>
-        /// <returns>Конфигурация GigaChat или null, если AI-анализ отключён.</returns>
+        /// <returns>Конфигурация GigaChat или null, если ИИ-анализ отключён.</returns>
         private static GigaChatConfiguration? TryLoadGigaChatConfiguration()
         {
-            Console.Write("Введите путь к JSON-файлу с настройками GigaChat (Enter чтобы пропустить AI-анализ): ");
+            Console.Write("Введите путь к JSON-файлу с настройками GigaChat (для пропуска ИИ-анализа оставить поле пустым): ");
             string? gigaChatConfigurationPath = Console.ReadLine();
             Console.WriteLine();
 
@@ -86,7 +86,11 @@ namespace WebVulnerabilitiesScanner
                 : scanConfiguration.Name;
 
             var scanner = new SqlInjectionScanner(baseUrl);
+            DateTime startScanTime = DateTime.Now;
             var results = scanner.ScanForSqlInjection(scanConfiguration.GetRequestEndpoints, scanConfiguration.PostRequestsInfo);
+#if DEBUG
+            Console.WriteLine($"Время выполнения сканирования: {(DateTime.Now - startScanTime).TotalSeconds} секунд");
+#endif
             AiScanAnalysisResult aiAnalysisResult = AnalyzeScanResultsWithAi(
                 baseUrl,
                 configurationName,
@@ -119,13 +123,13 @@ namespace WebVulnerabilitiesScanner
         }
 
         /// <summary>
-        /// Выполняет дополнительный AI-анализ результатов сканирования через GigaChat.
+        /// Выполняет дополнительный ИИ-анализ результатов сканирования через GigaChat.
         /// </summary>
         /// <param name="baseUrl">Базовый адрес сканируемого портала.</param>
         /// <param name="configurationName">Название конфигурации сканирования.</param>
         /// <param name="results">Результаты сканирования.</param>
         /// <param name="gigaChatConfiguration">Отдельная конфигурация GigaChat.</param>
-        /// <returns>Результат выполнения AI-анализа.</returns>
+        /// <returns>Результат выполнения ИИ-анализа.</returns>
         private static AiScanAnalysisResult AnalyzeScanResultsWithAi(
             string baseUrl,
             string configurationName,

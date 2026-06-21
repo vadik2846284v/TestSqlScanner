@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace WebVulnerabilitiesScanner.Entities
 {
     /// <summary>
-    /// Настройки AI-анализа через GigaChat, задаваемые в отдельном JSON-файле.
+    /// Настройки ИИ-анализа через GigaChat, задаваемые в отдельном JSON-файле.
     /// </summary>
     public class GigaChatConfiguration
     {

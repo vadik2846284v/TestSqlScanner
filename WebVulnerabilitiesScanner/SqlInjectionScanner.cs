@@ -700,7 +700,8 @@ public class SqlInjectionScanner
             "mysql error",
             "sql server",
             "violation of",
-            "foreign key constraint"
+            "foreign key constraint",
+            "xpath syntax error",
         };
 
         // Проверка на ошибки СУБД в ответе

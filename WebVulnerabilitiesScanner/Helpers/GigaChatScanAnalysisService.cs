@@ -7,7 +7,7 @@ using WebVulnerabilitiesScanner.Entities;
 namespace WebVulnerabilitiesScanner.Helpers
 {
     /// <summary>
-    /// Выполняет AI-анализ результатов сканирования через GigaChat API.
+    /// Выполняет ИИ-анализ результатов сканирования через GigaChat API.
     /// </summary>
     public sealed class GigaChatScanAnalysisService
     {
@@ -40,12 +40,12 @@ namespace WebVulnerabilitiesScanner.Helpers
         }
 
         /// <summary>
-        /// Запускает AI-анализ результатов сканирования и возвращает итоговый статус.
+        /// Запускает ИИ-анализ результатов сканирования и возвращает итоговый статус.
         /// </summary>
         /// <param name="baseUrl">Базовый адрес сканируемого приложения.</param>
         /// <param name="configurationName">Название конфигурации сканирования.</param>
         /// <param name="results">Результаты выполненных проверок.</param>
-        /// <returns>Результат выполнения AI-анализа.</returns>
+        /// <returns>Результат выполнения ИИ-анализа.</returns>
         public async Task<AiScanAnalysisResult> AnalyzeResultsAsync(
             string baseUrl,
             string configurationName,
@@ -55,7 +55,7 @@ namespace WebVulnerabilitiesScanner.Helpers
             {
                 return new AiScanAnalysisResult
                 {
-                    StatusMessage = "AI-анализ пропущен: отдельный конфиг GigaChat не задан или отключён."
+                    StatusMessage = "ИИ-анализ пропущен: отдельный конфиг GigaChat не задан или отключён."
                 };
             }
 
@@ -63,7 +63,7 @@ namespace WebVulnerabilitiesScanner.Helpers
             {
                 return new AiScanAnalysisResult
                 {
-                    StatusMessage = "AI-анализ пропущен: в конфиге GigaChat не заполнено поле authorizationKey."
+                    StatusMessage = "ИИ-анализ пропущен: в конфиге GigaChat не заполнено поле authorizationKey."
                 };
             }
 
@@ -71,7 +71,7 @@ namespace WebVulnerabilitiesScanner.Helpers
             {
                 return new AiScanAnalysisResult
                 {
-                    StatusMessage = "AI-анализ пропущен: нет результатов сканирования для обработки."
+                    StatusMessage = "ИИ-анализ пропущен: нет результатов сканирования для обработки."
                 };
             }
 
@@ -80,7 +80,7 @@ namespace WebVulnerabilitiesScanner.Helpers
             {
                 return new AiScanAnalysisResult
                 {
-                    StatusMessage = "AI-анализ пропущен: нет запросов с обнаруженной уязвимостью для передачи в GigaChat."
+                    StatusMessage = "ИИ-анализ пропущен: нет запросов с обнаруженной уязвимостью для передачи в GigaChat."
                 };
             }
 
@@ -94,7 +94,7 @@ namespace WebVulnerabilitiesScanner.Helpers
                 {
                     IsGenerated = true,
                     Summary = analysisSummary.Trim(),
-                    StatusMessage = $"AI-анализ успешно получен через GigaChat ({_model})."
+                    StatusMessage = $"ИИ-анализ успешно получен через GigaChat ({_model})."
                 };
             }
             catch (Exception ex)
@@ -102,7 +102,7 @@ namespace WebVulnerabilitiesScanner.Helpers
                 return new AiScanAnalysisResult
                 {
                     IsFailed = true,
-                    StatusMessage = $"AI-анализ через GigaChat завершился ошибкой: {BuildFriendlyErrorMessage(ex)}"
+                    StatusMessage = $"ИИ-анализ через GigaChat завершился ошибкой: {BuildFriendlyErrorMessage(ex)}"
                 };
             }
         }
@@ -160,7 +160,7 @@ namespace WebVulnerabilitiesScanner.Helpers
         /// </summary>
         /// <param name="accessToken">OAuth-токен GigaChat.</param>
         /// <param name="prompt">Подготовленный prompt с уязвимыми запросами.</param>
-        /// <returns>Текст AI-анализа.</returns>
+        /// <returns>Текст ИИ-анализа.</returns>
         private async Task<string> RequestAnalysisSummaryAsync(string accessToken, string prompt)
         {
             var payload = new
@@ -220,7 +220,7 @@ namespace WebVulnerabilitiesScanner.Helpers
         /// <param name="baseUrl">Базовый адрес сканируемого приложения.</param>
         /// <param name="configurationName">Название конфигурации сканирования.</param>
         /// <param name="results">Только запросы с флагом уязвимости.</param>
-        /// <returns>Подготовленный prompt для AI-модели.</returns>
+        /// <returns>Подготовленный prompt для ИИ-модели.</returns>
         private static string BuildAnalysisPrompt(
             string baseUrl,
             string configurationName,
@@ -237,9 +237,10 @@ namespace WebVulnerabilitiesScanner.Helpers
             promptBuilder.AppendLine("Проанализируй каждый запрос отдельно и ответь на русском языке.");
             promptBuilder.AppendLine("Для каждого запроса укажи:");
             promptBuilder.AppendLine("1. Какой запрос был выполнен.");
-            promptBuilder.AppendLine("2. Какой признак или ошибка указывает на возможную SQL-инъекцию.");
-            promptBuilder.AppendLine("3. Почему это выглядит подозрительно.");
-            promptBuilder.AppendLine("4. Что стоит перепроверить вручную.");
+            promptBuilder.AppendLine("2. Какая нагрузка была передана в запрос.");
+            promptBuilder.AppendLine("3. Какой признак или ошибка указывает на возможную SQL-инъекцию.");
+            promptBuilder.AppendLine("4. Почему это выглядит подозрительно.");
+            promptBuilder.AppendLine("5. Что стоит перепроверить вручную.");
             promptBuilder.AppendLine();
             promptBuilder.AppendLine("Контекст:");
             promptBuilder.AppendLine($"- Конфигурация: {configurationName}");
